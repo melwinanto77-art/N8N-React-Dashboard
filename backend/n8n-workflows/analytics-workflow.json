@@ -1,0 +1,152 @@
+{
+  "id": "bmd9BUbfHcEgP4w6",
+  "name": "Analytics Processing Pipeline",
+  "active": false,
+  "nodes": [
+    {
+      "id": "e0000001-0001-0000-0000-000000000001",
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 1 }]
+        }
+      },
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "id": "e0000001-0002-0000-0000-000000000002",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT site_id FROM sites WHERE is_active = true",
+        "additionalFields": {}
+      },
+      "name": "Get Active Sites",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": { "id": "1", "name": "Analytics DB" }
+      }
+    },
+    {
+      "id": "e0000001-0003-0000-0000-000000000003",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as pageviews, COUNT(DISTINCT visitor_id) as unique_visitors, AVG(time_on_page) as avg_time FROM events WHERE site_id = '{{ $json.site_id }}' AND event_type = 'pageview' AND timestamp > NOW() - INTERVAL '1 hour'",
+        "additionalFields": {}
+      },
+      "name": "Get Hourly Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "postgres": { "id": "1", "name": "Analytics DB" }
+      }
+    },
+    {
+      "id": "e0000001-0004-0000-0000-000000000004",
+      "parameters": {
+        "conditions": {
+          "number": [{
+            "value1": "={{ $json.pageviews }}",
+            "operation": "largerEqual",
+            "value2": 0
+          }]
+        }
+      },
+      "name": "High Traffic Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "id": "e0000001-0005-0000-0000-000000000005",
+      "parameters": {
+        "url": "http://host.docker.internal:3001/api/v1/mock-slack",
+        "requestMethod": "POST",
+        "body": "{\n  \"text\": \"🚀 High traffic alert! Site {{ $json.site_id }} received {{ $json.pageviews }} pageviews in the last hour.\"\n}",
+        "options": {}
+      },
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1050, 200],
+      "onError": "continue"
+    },
+    {
+      "id": "e0000001-0006-0000-0000-000000000006",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO website_suggestions (site_id, category, title, description, impact, effort, priority) SELECT site_id, 'traffic', 'Traffic Spike Detected', 'Your site received ' || COUNT(*) || ' visits in the last hour. Consider scaling resources.', 'high', 'low', 10 FROM events WHERE site_id = '{{ $json.site_id }}' AND timestamp > NOW() - INTERVAL '1 hour' GROUP BY site_id HAVING COUNT(*) > 100 ON CONFLICT DO NOTHING"
+      },
+      "name": "Store Suggestion",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "credentials": {
+        "postgres": { "id": "1", "name": "Analytics DB" }
+      }
+    },
+    {
+      "id": "e0000001-0007-0000-0000-000000000007",
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "days", "daysInterval": 1 }]
+        }
+      },
+      "name": "Daily Report",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 600]
+    },
+    {
+      "id": "e0000001-0008-0000-0000-000000000008",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s.site_id, s.domain, u.email, COUNT(e.id) as daily_views, COUNT(DISTINCT e.visitor_id) as daily_unique, ROUND(AVG(e.time_on_page)/1000, 1) as avg_seconds FROM sites s JOIN users u ON s.user_id = u.id LEFT JOIN events e ON s.site_id = e.site_id AND e.event_type = 'pageview' AND e.timestamp > NOW() - INTERVAL '24 hours' WHERE s.is_active = true GROUP BY s.site_id, s.domain, u.email"
+      },
+      "name": "Daily Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 600],
+      "credentials": {
+        "postgres": { "id": "1", "name": "Analytics DB" }
+      }
+    },
+    {
+      "id": "e0000001-0009-0000-0000-000000000009",
+      "parameters": {
+        "fromEmail": "analytics@your-domain.com",
+        "toEmail": "={{ $json.email }}",
+        "subject": "📊 Daily Analytics Report - {{ $json.domain }}",
+        "text": "Your daily analytics summary:\n\nPageviews: {{ $json.daily_views }}\nUnique Visitors: {{ $json.daily_unique }}\nAvg Time: {{ $json.avg_seconds }}s\n\nView full dashboard: https://your-dashboard.com"
+      },
+      "name": "Send Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [650, 600],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "SMTP Credential"
+        }
+      },
+      "onError": "continue"
+    }
+  ],
+  "connections": {
+    "Every Hour": { "main": [[{ "node": "Get Active Sites", "type": "main", "index": 0 }]] },
+    "Get Active Sites": { "main": [[{ "node": "Get Hourly Stats", "type": "main", "index": 0 }]] },
+    "Get Hourly Stats": { "main": [[{ "node": "High Traffic Check", "type": "main", "index": 0 }]] },
+    "High Traffic Check": {
+      "main": [
+        [{ "node": "Slack Alert", "type": "main", "index": 0 }, { "node": "Store Suggestion", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Daily Report": { "main": [[{ "node": "Daily Stats", "type": "main", "index": 0 }]] },
+    "Daily Stats": { "main": [[{ "node": "Send Email Report", "type": "main", "index": 0 }]] }
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.local
+dashboard/build/
+backend/api/node_modules/
+dashboard/node_modules/
+npm-debug.log*
+*.log
+.DS_Store
+mongodb_data/
+

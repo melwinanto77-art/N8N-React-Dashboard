@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: analytics
+      POSTGRES_USER: analytics_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-supersecretpassword}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./api/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics_user -d analytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  api:
+    build: ./api
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: analytics
+      DB_USER: analytics_user
+      DB_PASSWORD: ${DB_PASSWORD:-supersecretpassword}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-key-change-this}
+      N8N_WEBHOOK_URL: http://n8n:5678
+      PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-admin123}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=analytics
+      - DB_POSTGRESDB_USER=analytics_user
+      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD:-supersecretpassword}
+      - WEBHOOK_URL=http://localhost:5678
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:

@@ -1,0 +1,74 @@
+{
+  "id": "b2b-inbound-radar",
+  "name": "B2B Inbound Radar",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "f1a2b3c4-0001-4a01-8a01-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "a1b2c3d4-e5f6-4711-9a01-radarwebhook01",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "radar",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "f1a2b3c4-0002-4a02-8a02-000000000002",
+      "name": "Reverse IP + ICP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Reverse IP + ICP filter — mirrors server/mock-data.js EXACTLY (same COMPANY_DB,\n// NON_CORPORATE_PREFIXES, TARGET_INDUSTRIES) so the n8n path resolves identically\n// to the relay's /webhook path. For each incoming beacon (item.json.body), resolve\n// the IP to a company; drop non-corporate / out-of-ICP visits; otherwise emit one\n// item { site, company, page, durationSec, ts } for the HTTP node to POST to /ingest.\n\nconst COMPANY_DB = [\n  { ipPrefix: '52.95.', domain: 'stripe.com', name: 'Stripe', industry: 'Fintech', size: '1000-5000', country: 'United States', logo: 'https://logo.clearbit.com/stripe.com' },\n  { ipPrefix: '104.16.', domain: 'shopify.com', name: 'Shopify', industry: 'E-commerce', size: '5000-10000', country: 'Canada', logo: 'https://logo.clearbit.com/shopify.com' },\n  { ipPrefix: '13.107.', domain: 'datadoghq.com', name: 'Datadog', industry: 'SaaS', size: '1000-5000', country: 'United States', logo: 'https://logo.clearbit.com/datadoghq.com' },\n  { ipPrefix: '151.101.', domain: 'hashicorp.com', name: 'HashiCorp', industry: 'Infrastructure', size: '1000-5000', country: 'United States', logo: 'https://logo.clearbit.com/hashicorp.com' },\n  { ipPrefix: '35.190.', domain: 'atlassian.com', name: 'Atlassian', industry: 'Software', size: '5000-10000', country: 'Australia', logo: 'https://logo.clearbit.com/atlassian.com' },\n  { ipPrefix: '192.30.', domain: 'github.com', name: 'GitHub', industry: 'Software', size: '1000-5000', country: 'United States', logo: 'https://logo.clearbit.com/github.com' },\n  { ipPrefix: '3.101.', domain: 'plaid.com', name: 'Plaid', industry: 'Fintech', size: '500-1000', country: 'United States', logo: 'https://logo.clearbit.com/plaid.com' },\n  { ipPrefix: '18.200.', domain: 'klarna.com', name: 'Klarna', industry: 'Fintech', size: '5000-10000', country: 'Sweden', logo: 'https://logo.clearbit.com/klarna.com' },\n  { ipPrefix: '34.120.', domain: 'snowflake.com', name: 'Snowflake', industry: 'Infrastructure', size: '5000-10000', country: 'United States', logo: 'https://logo.clearbit.com/snowflake.com' },\n  { ipPrefix: '20.190.', domain: 'twilio.com', name: 'Twilio', industry: 'SaaS', size: '5000-10000', country: 'United States', logo: 'https://logo.clearbit.com/twilio.com' },\n  { ipPrefix: '162.247.', domain: 'bigcommerce.com', name: 'BigCommerce', industry: 'E-commerce', size: '500-1000', country: 'United States', logo: 'https://logo.clearbit.com/bigcommerce.com' },\n  { ipPrefix: '199.232.', domain: 'segment.com', name: 'Segment', industry: 'SaaS', size: '500-1000', country: 'United States', logo: 'https://logo.clearbit.com/segment.com' },\n  { ipPrefix: '23.235.', domain: 'netflix.com', name: 'Netflix', industry: 'Media', size: '10000+', country: 'United States', logo: 'https://logo.clearbit.com/netflix.com' },\n  { ipPrefix: '208.78.', domain: 'riotgames.com', name: 'Riot Games', industry: 'Gaming', size: '1000-5000', country: 'United States', logo: 'https://logo.clearbit.com/riotgames.com' }\n];\n\nconst NON_CORPORATE_PREFIXES = ['192.168.', '10.', '172.16.', '98.116.', '71.198.', '76.102.', '174.21.', '100.64.', '208.54.', '107.77.'];\n\nconst TARGET_INDUSTRIES = ['Fintech', 'E-commerce', 'SaaS', 'Software', 'Infrastructure'];\n\nfunction reverseIpLookup(ip) {\n  if (!ip) return null;\n  if (NON_CORPORATE_PREFIXES.some((p) => ip.startsWith(p))) return null;\n  return COMPANY_DB.find((c) => ip.startsWith(c.ipPrefix)) || null;\n}\n\nfunction isTargetIndustry(company) {\n  return !!company && TARGET_INDUSTRIES.includes(company.industry);\n}\n\nconst out = [];\nfor (const it of $input.all()) {\n  const body = (it.json && it.json.body) || it.json || {};\n  const { ip, site, page, durationSec, ts } = body;\n  const company = reverseIpLookup(ip);\n  if (!company) continue;            // non-corporate / unknown IP — dropped\n  if (!isTargetIndustry(company)) continue; // out-of-ICP — dropped\n  out.push({ json: { site, company, page, durationSec, ts } });\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "f1a2b3c4-0003-4a03-8a03-000000000003",
+      "name": "Push to Radar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:4000/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "f1a2b3c4-0004-4a04-8a04-000000000004",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"ok\" }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Reverse IP + ICP", "type": "main", "index": 0 }]]
+    },
+    "Reverse IP + ICP": {
+      "main": [[{ "node": "Push to Radar", "type": "main", "index": 0 }]]
+    },
+    "Push to Radar": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  }
+}
