@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRadarFeed } from "./useRadarFeed.js";
 import SiteGate from "./components/SiteGate.jsx";
 import StatBar from "./components/StatBar.jsx";
@@ -6,15 +6,35 @@ import CompanyCard from "./components/CompanyCard.jsx";
 import ContactsPanel from "./components/ContactsPanel.jsx";
 import SEOPanel from "./components/SEOPanel.jsx";
 import AnalyticsPanel from "./components/AnalyticsPanel.jsx";
+import LoginsPanel from "./components/LoginsPanel.jsx";
 
 export default function App() {
   const [site, setSite] = useState("");
   const [hotOnly, setHotOnly] = useState(false);
   const [selected, setSelected] = useState(null);
   const [seoOpen, setSeoOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("live"); // "live" or "analytics"
+  const [activeTab, setActiveTab] = useState("live"); // "live", "analytics", or "logins"
+  const [overview, setOverview] = useState(null);
 
   const { sessions, connected, flash } = useRadarFeed(site);
+
+  useEffect(() => {
+    if (!site) return;
+    async function fetchOverview() {
+      try {
+        const res = await fetch(`/api/analytics/overview?site=${encodeURIComponent(site)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setOverview(data);
+        }
+      } catch (err) {
+        console.error("Overview fetch error:", err);
+      }
+    }
+    fetchOverview();
+    const interval = setInterval(fetchOverview, 5000);
+    return () => clearInterval(interval);
+  }, [site]);
 
   const visible = useMemo(
     () => (hotOnly ? sessions.filter((s) => s.hot) : sessions),
@@ -30,6 +50,7 @@ export default function App() {
     setSeoOpen(false);
     setHotOnly(false);
     setActiveTab("live");
+    setOverview(null);
     setSite("");
   }
 
@@ -57,6 +78,13 @@ export default function App() {
           >
             Analytics
           </button>
+          <button 
+            className={`tab-btn${activeTab === "logins" ? " active" : ""}`} 
+            onClick={() => setActiveTab("logins")}
+            type="button"
+          >
+            Identified Users
+          </button>
         </div>
 
         <div className="topbar-right">
@@ -74,7 +102,7 @@ export default function App() {
       </header>
 
       <main className="content">
-        <StatBar sessions={sessions} />
+        <StatBar sessions={sessions} overview={overview} />
 
         {activeTab === "live" ? (
           <>
@@ -117,8 +145,10 @@ export default function App() {
               </div>
             )}
           </>
-        ) : (
+        ) : activeTab === "analytics" ? (
           <AnalyticsPanel site={site} />
+        ) : (
+          <LoginsPanel sessions={sessions} />
         )}
       </main>
 

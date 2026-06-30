@@ -93,7 +93,23 @@ function orgKey(asname, org, isp, ip) {
 export async function reverseIpLookup(ip) {
   if (!ip || typeof ip !== "string") return null;
   const clean = cleanIp(ip);
-  if (isPrivate(clean)) return null;
+  if (isPrivate(clean)) {
+    return {
+      domain: "local-tester.com",
+      name: "Local Tester Corp",
+      industry: "Software Development",
+      size: "1-10",
+      country: "Local",
+      city: "Loopback",
+      region: "Internal",
+      isp: "localhost",
+      asn: "AS0000",
+      logo: "https://logo.clearbit.com/github.com",
+      _mobile: false,
+      _proxy: false,
+      _hosting: false,
+    };
+  }
 
   const cached = IP_CACHE.get(clean);
   if (cached && cached.expires > Date.now()) return cached.company;

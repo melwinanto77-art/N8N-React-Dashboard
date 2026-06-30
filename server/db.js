@@ -14,7 +14,8 @@ const TimelineEntrySchema = new Schema({
   os: String,
   referrer: String,
   country: String,
-  city: String
+  city: String,
+  email: String
 });
 
 // Client snapshot schema
@@ -53,7 +54,8 @@ const SessionSchema = new Schema({
   client: ClientSnapshotSchema,
   score: { type: Number, default: 0 },
   hot: { type: Boolean, default: false },
-  hasContacts: { type: Boolean, default: false }
+  hasContacts: { type: Boolean, default: false },
+  identifiedEmail: String
 }, {
   timestamps: true
 });
@@ -93,7 +95,8 @@ const VisitSchema = new Schema({
   },
   company: CompanySchema,
   score: Number,
-  hot: Boolean
+  hot: Boolean,
+  email: String
 }, {
   timestamps: true
 });
@@ -111,7 +114,11 @@ const SeoSnapshotSchema = new Schema({
   capturedAt: { type: Date, default: Date.now },
   seo: Schema.Types.Mixed,
   score: Number,
-  recommendations: Schema.Types.Mixed
+  recommendations: Schema.Types.Mixed,
+  aeoScore: { type: Number, default: 0 },
+  geoScore: { type: Number, default: 0 },
+  aeoRecommendations: Schema.Types.Mixed,
+  geoRecommendations: Schema.Types.Mixed
 }, {
   timestamps: true
 });

@@ -10,16 +10,19 @@
   let publicIp = null;
   let maxScroll = 0;
 
-  // Extract client ID from the script tag (e.g. data-client-id="12345")
+  // Extract client ID and site override from the script tag
   let clientId = null;
+  let siteOverride = null;
   if (document.currentScript) {
     clientId = document.currentScript.getAttribute("data-client-id");
+    siteOverride = document.currentScript.getAttribute("data-site");
   } else {
     const scripts = document.getElementsByTagName("script");
     for (let i = 0; i < scripts.length; i++) {
       const src = scripts[i].getAttribute("src") || "";
       if (src.includes("radar.js")) {
         clientId = scripts[i].getAttribute("data-client-id");
+        siteOverride = scripts[i].getAttribute("data-site");
         break;
       }
     }
@@ -148,7 +151,7 @@
     sent = true;
     const body = {
       clientId: clientId || "unknown",
-      site: location.host,
+      site: siteOverride || location.host,
       page: location.pathname,
       url: location.href,
       durationSec: Math.round((Date.now() - start) / 1000),
@@ -182,8 +185,47 @@
     }).catch(() => {});
   }
 
+  function sendIdentify(email) {
+    const body = {
+      clientId: clientId || "unknown",
+      site: siteOverride || location.host,
+      page: location.pathname,
+      url: location.href,
+      durationSec: Math.round((Date.now() - start) / 1000),
+      ts: new Date().toISOString(),
+      ip: publicIp,
+      device: deviceType(),
+      browser: browserName(),
+      os: osName(),
+      screen: screen.width + "x" + screen.height,
+      viewport: window.innerWidth + "x" + window.innerHeight,
+      language: navigator.language,
+      timezone: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || null,
+      referrer: document.referrer || null,
+      scrollDepth: maxScroll,
+      utm: utmParams(),
+      performance: perfMetrics(),
+      seo: seoSnapshot(),
+      email: email
+    };
+    const json = JSON.stringify(body);
+    fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: json,
+      keepalive: true,
+    }).catch(() => {});
+  }
+
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") send();
   });
   window.addEventListener("pagehide", send);
+
+  // Expose global identify method
+  window.__inboundRadar = {
+    identify: (email) => {
+      if (email) sendIdentify(email);
+    }
+  };
 })();

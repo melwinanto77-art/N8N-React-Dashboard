@@ -183,3 +183,144 @@ export function scoreSeo(seo = {}) {
 
   return { score: Math.min(score, max), recommendations: recs };
 }
+
+export function scoreAeoAndGeo(seo = {}) {
+  let aeoScore = 0;
+  let geoScore = 0;
+  const aeoRecs = [];
+  const geoRecs = [];
+
+  // AEO calculations
+  // 1. Structure & Readability (30)
+  if (seo.wordCount >= 300 && seo.wordCount <= 1200) {
+    aeoScore += 30;
+  } else if (seo.wordCount > 1200) {
+    aeoScore += 20;
+    aeoRecs.push({
+      category: "aeo",
+      severity: "info",
+      message: "Content is very long. Consider adding a TL;DR summary at the top for AI engines.",
+      fix: "Add a concise 2-3 sentence summary of the page at the very beginning."
+    });
+  } else {
+    aeoScore += 10;
+    aeoRecs.push({
+      category: "aeo",
+      severity: "warning",
+      message: "Word count is too low for detailed AI answers.",
+      fix: "Expand the page content to at least 300 words to provide enough depth for AI engines."
+    });
+  }
+
+  // 2. Headings & Q&A Structure (30)
+  if (seo.h2Count >= 3) {
+    aeoScore += 30;
+  } else {
+    aeoScore += (seo.h2Count || 0) * 10;
+    aeoRecs.push({
+      category: "aeo",
+      severity: "warning",
+      message: "Few subheadings (H2). AI engines prefer structured Q&A formats.",
+      fix: "Structure your sections as clear questions (e.g., 'How does it work?') using H2 or H3 tags."
+    });
+  }
+
+  // 3. Metadata & Context (20)
+  if (seo.canonicalUrl && seo.metaDescription) {
+    aeoScore += 20;
+  } else {
+    aeoScore += 10;
+    aeoRecs.push({
+      category: "aeo",
+      severity: "info",
+      message: "Missing canonical URL or meta description.",
+      fix: "Add canonical and meta tags to help AI search crawlers index and summarize the page."
+    });
+  }
+
+  // 4. Question-based Title / Path (20)
+  const isQuestion = /what|how|why|who|where|when|pricing|vs|guide|review/i.test(seo.title || "") || 
+                     /what|how|why|who|where|when|pricing|vs|guide|review/i.test(seo.canonicalUrl || "");
+  if (isQuestion) {
+    aeoScore += 20;
+  } else {
+    aeoScore += 10;
+    aeoRecs.push({
+      category: "aeo",
+      severity: "info",
+      message: "Title is not phrased as a question or conversational query.",
+      fix: "Phrase your page title or headers to match voice search queries (e.g. 'How to...')."
+    });
+  }
+
+  // GEO calculations
+  // 1. External citations & links (30)
+  if (seo.externalLinks >= 2) {
+    geoScore += 30;
+  } else if (seo.externalLinks === 1) {
+    geoScore += 15;
+    geoRecs.push({
+      category: "geo",
+      severity: "warning",
+      message: "Only one external link. LLM search engines value citations and outbound authority links.",
+      fix: "Add links to authoritative external sources, statistics, or references to back up claims."
+    });
+  } else {
+    geoRecs.push({
+      category: "geo",
+      severity: "critical",
+      message: "No outbound external links. Generative engines may flag the content as uncited or low-authority.",
+      fix: "Add citations and links to reputable external sources to increase factual authority."
+    });
+  }
+
+  // 2. Factual Density & Depth (30)
+  if (seo.wordCount >= 500) {
+    geoScore += 30;
+  } else {
+    geoScore += Math.round(((seo.wordCount || 0) / 500) * 30);
+    geoRecs.push({
+      category: "geo",
+      severity: "warning",
+      message: "Low factual density. Generative search engines prefer highly informative, data-rich pages.",
+      fix: "Add statistics, facts, and detailed explanations to increase the information density."
+    });
+  }
+
+  // 3. Semantic Richness & Media (20)
+  if (seo.totalImages >= 3 && seo.h2Count >= 3) {
+    geoScore += 20;
+  } else {
+    geoScore += 10;
+    geoRecs.push({
+      category: "geo",
+      severity: "info",
+      message: "Add more structured sections and visual aids.",
+      fix: "Incorporate diagrams, images, and structured tables to make the content easy for LLMs to parse."
+    });
+  }
+
+  // 4. Social & Metadata Verification (20)
+  if (seo.ogTitle && seo.ogDescription) {
+    geoScore += 20;
+  } else {
+    geoScore += 10;
+    geoRecs.push({
+      category: "geo",
+      severity: "info",
+      message: "Missing Open Graph social metadata.",
+      fix: "Verify your social tags (og:title, og:description) to establish brand identity for LLM agents."
+    });
+  }
+
+  const severityRank = { critical: 0, warning: 1, info: 2 };
+  aeoRecs.sort((a, b) => (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3));
+  geoRecs.sort((a, b) => (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3));
+
+  return {
+    aeoScore: Math.min(aeoScore, 100),
+    geoScore: Math.min(geoScore, 100),
+    aeoRecommendations: aeoRecs,
+    geoRecommendations: geoRecs
+  };
+}
