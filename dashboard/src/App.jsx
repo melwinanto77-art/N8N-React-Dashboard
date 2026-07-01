@@ -40,6 +40,7 @@ export default function App() {
     totalLogins: 0,
     hotLeads: 0,
     minutesEngaged: 0,
+    activeUsers: 0,
     avgPageLoadMs: 280,
     avgTtfbMs: 65
   };
@@ -59,6 +60,10 @@ export default function App() {
           <span className="brand-name" style={{ fontWeight: "800", color: "#fff", fontSize: "16px" }}>Inbound Radar</span>
           <span className="brand-badge" style={{ fontSize: "10px", padding: "3px 8px", backgroundColor: "#22c55e", color: "#fff", borderRadius: "4px", fontWeight: "bold" }}>ANALYTICS</span>
           <span className="brand-site" style={{ fontSize: "13px", color: "#a1a1aa", border: "1px solid #27272a", padding: "3px 10px", borderRadius: "20px", backgroundColor: "#09090b" }}>{site}</span>
+          <span className="realtime-badge" style={{ fontSize: "12px", color: "#22c55e", backgroundColor: "rgba(34, 197, 94, 0.1)", border: "1px solid rgba(34, 197, 94, 0.2)", padding: "3px 10px", borderRadius: "20px", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}>
+            <span className="radar-dot radar-dot-live" style={{ width: "6px", height: "6px", backgroundColor: "#22c55e", borderRadius: "50%", display: "inline-block" }} />
+            {cleanOverview.activeUsers || 0} active now
+          </span>
         </div>
 
         <div className="topbar-right" style={{ display: "flex", gap: "10px" }}>

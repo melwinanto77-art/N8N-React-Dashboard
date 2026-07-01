@@ -1178,6 +1178,13 @@ app.get("/api/analytics/overview", async (req, res) => {
     const totalSeconds = totalDurationResult.length ? totalDurationResult[0].totalSeconds : 0;
     const minutesEngaged = Math.round(totalSeconds / 60);
     
+    // Calculate active users in the last 5 minutes (based on unique IPs or Client IDs)
+    const activeUsersList = await VisitModel.distinct("ip", {
+      site,
+      ts: { $gte: new Date(Date.now() - 5 * 60 * 1000) }
+    });
+    const activeUsers = activeUsersList.length;
+    
     const perfData = await VisitModel.aggregate([
       { $match: { site, "performance.pageLoadMs": { $exists: true } } },
       { $group: {
@@ -1197,6 +1204,7 @@ app.get("/api/analytics/overview", async (req, res) => {
       totalLogins,
       hotLeads,
       minutesEngaged,
+      activeUsers,
       avgPageLoadMs,
       avgTtfbMs
     });

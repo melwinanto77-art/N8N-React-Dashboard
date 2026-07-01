@@ -28,15 +28,20 @@
     }
   }
 
-  // Fetch the real public IP up front (so localhost visits still resolve to a real
-  // org server-side). Best-effort: if it fails we send nothing and the relay falls
-  // back to the connection IP.
+  // Fetch the real public IP up front and trigger pageview.
   try {
     fetch("https://api.ipify.org?format=json")
       .then((r) => r.json())
-      .then((d) => { publicIp = d && d.ip; })
-      .catch(() => {});
-  } catch (e) {}
+      .then((d) => {
+        publicIp = d && d.ip;
+        sendPageview();
+      })
+      .catch(() => {
+        sendPageview();
+      });
+  } catch (e) {
+    sendPageview();
+  }
 
   // Track furthest scroll depth (%) as a real engagement signal.
   window.addEventListener(
@@ -144,6 +149,39 @@
       hasViewportMeta: !!meta["viewport"],
       wordCount: words,
     };
+  }
+
+  let pageviewSent = false;
+  function sendPageview() {
+    if (pageviewSent) return;
+    pageviewSent = true;
+    const body = {
+      clientId: clientId || "unknown",
+      site: siteOverride || location.host,
+      page: location.pathname,
+      url: location.href,
+      durationSec: 0,
+      ts: new Date().toISOString(),
+      ip: publicIp,
+      device: deviceType(),
+      browser: browserName(),
+      os: osName(),
+      screen: screen.width + "x" + screen.height,
+      viewport: window.innerWidth + "x" + window.innerHeight,
+      language: navigator.language,
+      timezone: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || null,
+      referrer: document.referrer || null,
+      scrollDepth: 0,
+      utm: utmParams(),
+      performance: {},
+      seo: seoSnapshot(),
+    };
+    fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      keepalive: true,
+    }).catch(() => {});
   }
 
   function send() {
