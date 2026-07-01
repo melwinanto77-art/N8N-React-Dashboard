@@ -329,6 +329,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                     </tbody>
                   </table>
                 </div>
+              )}
             </section>
           </div>
 
