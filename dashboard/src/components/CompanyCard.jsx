@@ -30,6 +30,9 @@ function hostFromUrl(url) {
 export default function CompanyCard({ session, flashing, onViewContacts }) {
   const { company, score, hot, totalSeconds, pageViews, timeline, client } = session;
   const [logoOk, setLogoOk] = useState(() => {
+    if (company.logo && company.logo.startsWith("https://logo.clearbit.com/")) {
+      return false;
+    }
     if (typeof window !== "undefined" && (window.__clearbitFailed || navigator.onLine === false)) {
       return false;
     }

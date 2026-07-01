@@ -27,6 +27,9 @@ function hostFromUrl(url) {
 
 function SafeCompanyLogo({ logo, name }) {
   const [logoOk, setLogoOk] = useState(() => {
+    if (logo && logo.startsWith("https://logo.clearbit.com/")) {
+      return false;
+    }
     if (typeof window !== "undefined" && (window.__clearbitFailed || navigator.onLine === false)) {
       return false;
     }
