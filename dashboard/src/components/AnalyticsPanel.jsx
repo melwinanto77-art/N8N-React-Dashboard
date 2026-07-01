@@ -71,6 +71,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
   const [pagesList, setPagesList] = useState([]);
   const [usersList, setUsersList] = useState([]);
   const [loginsList, setLoginsList] = useState([]);
+  const [acquisition, setAcquisition] = useState({ referrers: [], entryPages: [], campaigns: [] });
 
   // AI Report states
   const [aiReport, setAiReport] = useState("");
@@ -82,28 +83,30 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
       setLoading(true);
       setError(null);
       try {
-        const [overviewRes, funnelRes, companiesRes, pagesIndRes, pagesRes, usersRes, loginsRes] = await Promise.all([
+        const [overviewRes, funnelRes, companiesRes, pagesIndRes, pagesRes, usersRes, loginsRes, acquisitionRes] = await Promise.all([
           fetch(`/api/analytics/overview?site=${encodeURIComponent(site)}`),
           fetch(`/api/analytics/conversion-funnel?site=${encodeURIComponent(site)}`),
           fetch(`/api/analytics/top-companies?site=${encodeURIComponent(site)}`),
           fetch(`/api/analytics/pages-by-industry?site=${encodeURIComponent(site)}`),
           fetch(`/api/analytics/pages?site=${encodeURIComponent(site)}`),
           fetch(`/api/analytics/users?site=${encodeURIComponent(site)}`),
-          fetch(`/api/analytics/new-logins?site=${encodeURIComponent(site)}`)
+          fetch(`/api/analytics/new-logins?site=${encodeURIComponent(site)}`),
+          fetch(`/api/analytics/acquisition?site=${encodeURIComponent(site)}`)
         ]);
 
-        if (!overviewRes.ok || !funnelRes.ok || !companiesRes.ok || !pagesIndRes.ok || !pagesRes.ok || !usersRes.ok || !loginsRes.ok) {
+        if (!overviewRes.ok || !funnelRes.ok || !companiesRes.ok || !pagesIndRes.ok || !pagesRes.ok || !usersRes.ok || !loginsRes.ok || !acquisitionRes.ok) {
           throw new Error("Failed to fetch some analytics data endpoints.");
         }
 
-        const [overviewData, funnelData, companiesData, pagesIndData, pagesData, usersData, loginsData] = await Promise.all([
+        const [overviewData, funnelData, companiesData, pagesIndData, pagesData, usersData, loginsData, acquisitionData] = await Promise.all([
           overviewRes.json(),
           funnelRes.json(),
           companiesRes.json(),
           pagesIndRes.json(),
           pagesRes.json(),
           usersRes.json(),
-          loginsRes.json()
+          loginsRes.json(),
+          acquisitionRes.json()
         ]);
 
         setOverview(overviewData);
@@ -113,6 +116,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
         setPagesList(pagesData);
         setUsersList(usersData);
         setLoginsList(loginsData);
+        setAcquisition(acquisitionData);
       } catch (err) {
         console.error("Analytics load error:", err);
         setError(err.message || "An error occurred while loading dashboard analytics.");
@@ -183,6 +187,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
         {[
           { id: "overview", name: "Overview & Funnel" },
           { id: "pages", name: `Pages (${pagesList.length})` },
+          { id: "acquisition", name: "Acquisition & Entry Paths" },
           { id: "users", name: `User Sessions (${usersList.length})` },
           { id: "logins", name: `New Logins (${loginsList.length})` },
           { id: "aiReport", name: "✨ AI Analyst" }
@@ -457,6 +462,114 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
             </div>
           )}
         </section>
+      )}
+
+      {/* ACQUISITION & ENTRY PATHS SUB-TAB */}
+      {subTab === "acquisition" && (
+        <div className="fade-in">
+          <div className="analytics-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(450px, 1fr))", gap: "24px", marginBottom: "24px" }}>
+            {/* Traffic Sources */}
+            <section className="analytics-section">
+              <h3 className="section-title">Traffic Sources / Referrers</h3>
+              <p className="section-subtitle">Domains that directed companies to your site</p>
+              
+              {acquisition.referrers.length === 0 ? (
+                <div className="analytics-empty">No external referrer data recorded yet.</div>
+              ) : (
+                <div className="analytics-table-container">
+                  <table className="analytics-table">
+                    <thead>
+                      <tr>
+                        <th>Referrer Domain</th>
+                        <th className="num">Sessions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {acquisition.referrers.map((r, idx) => (
+                        <tr key={`${r.name}-${idx}`}>
+                          <td>
+                            <span style={{ fontWeight: "600", color: "#fff" }}>{r.name}</span>
+                          </td>
+                          <td className="num highlighted-num">{r.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {/* Landing/Entry Pages */}
+            <section className="analytics-section">
+              <h3 className="section-title">Top Entry Pages</h3>
+              <p className="section-subtitle">The first pages that visitors land on when entering the site</p>
+              
+              {acquisition.entryPages.length === 0 ? (
+                <div className="analytics-empty">No landing page data recorded yet.</div>
+              ) : (
+                <div className="analytics-table-container">
+                  <table className="analytics-table">
+                    <thead>
+                      <tr>
+                        <th>Page Path</th>
+                        <th className="num">Entry Count</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {acquisition.entryPages.map((p, idx) => (
+                        <tr key={`${p.path}-${idx}`}>
+                          <td>
+                            <span className="table-path" style={{ fontFamily: "monospace", color: "#f4f4f5" }}>{p.path}</span>
+                          </td>
+                          <td className="num highlighted-num">{p.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* Marketing Campaigns (UTM Parameters) */}
+          <section className="analytics-section">
+            <h3 className="section-title">Marketing Campaigns & Channels</h3>
+            <p className="section-subtitle">Inbound traffic tracked via UTM parameters</p>
+            
+            {acquisition.campaigns.length === 0 ? (
+              <div className="analytics-empty">No UTM campaigns tracked yet. Use ?utm_source=... to tag links.</div>
+            ) : (
+              <div className="analytics-table-container">
+                <table className="analytics-table">
+                  <thead>
+                    <tr>
+                      <th>Source</th>
+                      <th>Medium</th>
+                      <th>Campaign Name</th>
+                      <th className="num">Tagged Hits</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {acquisition.campaigns.map((c, idx) => (
+                      <tr key={`${c.source}-${c.campaign}-${idx}`}>
+                        <td>
+                          <span className="table-badge table-badge-blue">{c.source}</span>
+                        </td>
+                        <td>
+                          <span style={{ color: "#a1a1aa", fontSize: "13px" }}>{c.medium}</span>
+                        </td>
+                        <td>
+                          <span style={{ color: "#fff", fontWeight: "600" }}>{c.campaign}</span>
+                        </td>
+                        <td className="num highlighted-num">{c.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
       )}
 
       {/* 3. USER SESSIONS SUB-TAB */}

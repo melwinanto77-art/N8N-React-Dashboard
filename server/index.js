@@ -1162,6 +1162,90 @@ app.get("/api/analytics/new-logins", async (req, res) => {
   }
 });
 
+app.get("/api/analytics/acquisition", async (req, res) => {
+  const site = normalizeSite(req.query.site);
+  if (!site) return res.status(400).json({ error: "site is required" });
+  try {
+    // 1. Top Referrers
+    const referrersData = await SessionModel.aggregate([
+      { $match: { site } },
+      { $group: {
+          _id: "$client.referrer",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const referrerCounts = {};
+    for (const item of referrersData) {
+      let refHost = "Direct / None";
+      if (item._id) {
+        try {
+          refHost = new URL(item._id).hostname.replace(/^www\./, "");
+        } catch {
+          refHost = item._id;
+        }
+      }
+      referrerCounts[refHost] = (referrerCounts[refHost] || 0) + item.count;
+    }
+
+    const referrers = Object.entries(referrerCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // 2. Top Landing Pages
+    const landingData = await SessionModel.aggregate([
+      { $match: { site } },
+      { $project: {
+          entryPage: { $arrayElemAt: ["$timeline.path", 0] }
+        }
+      },
+      { $group: {
+          _id: "$entryPage",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const entryPages = landingData.map(item => ({
+      path: item._id || "/",
+      count: item.count
+    }));
+
+    // 3. Top UTM campaigns
+    const utmData = await VisitModel.aggregate([
+      { $match: { site, "utm.source": { $ne: null } } },
+      { $group: {
+          _id: {
+            source: "$utm.source",
+            medium: "$utm.medium",
+            campaign: "$utm.campaign"
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const campaigns = utmData.map(item => ({
+      source: item._id.source,
+      medium: item._id.medium || "organic",
+      campaign: item._id.campaign || "none",
+      count: item.count
+    }));
+
+    res.json({
+      referrers,
+      entryPages,
+      campaigns
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/analytics/overview", async (req, res) => {
   const site = normalizeSite(req.query.site);
   if (!site) return res.status(400).json({ error: "site is required" });
