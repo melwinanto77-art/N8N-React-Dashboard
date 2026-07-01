@@ -26,14 +26,25 @@ function hostFromUrl(url) {
 }
 
 function SafeCompanyLogo({ logo, name }) {
-  const [logoOk, setLogoOk] = useState(true);
+  const [logoOk, setLogoOk] = useState(() => {
+    if (typeof window !== "undefined" && (window.__clearbitFailed || navigator.onLine === false)) {
+      return false;
+    }
+    return true;
+  });
+
   if (logoOk && logo) {
     return (
       <img
         className="table-company-logo"
         src={logo}
         alt=""
-        onError={() => setLogoOk(false)}
+        onError={() => {
+          setLogoOk(false);
+          if (typeof window !== "undefined") {
+            window.__clearbitFailed = true;
+          }
+        }}
       />
     );
   }

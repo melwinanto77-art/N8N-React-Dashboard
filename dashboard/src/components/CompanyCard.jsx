@@ -29,7 +29,12 @@ function hostFromUrl(url) {
 
 export default function CompanyCard({ session, flashing, onViewContacts }) {
   const { company, score, hot, totalSeconds, pageViews, timeline, client } = session;
-  const [logoOk, setLogoOk] = useState(true);
+  const [logoOk, setLogoOk] = useState(() => {
+    if (typeof window !== "undefined" && (window.__clearbitFailed || navigator.onLine === false)) {
+      return false;
+    }
+    return true;
+  });
 
   // AI states
   const [aiData, setAiData] = useState(null);
@@ -79,7 +84,12 @@ export default function CompanyCard({ session, flashing, onViewContacts }) {
               src={company.logo}
               alt=""
               loading="lazy"
-              onError={() => setLogoOk(false)}
+              onError={() => {
+                setLogoOk(false);
+                if (typeof window !== "undefined") {
+                  window.__clearbitFailed = true;
+                }
+              }}
             />
           ) : (
             <div className="card-logo card-logo-fallback" aria-hidden="true">
