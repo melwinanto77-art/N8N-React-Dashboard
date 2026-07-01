@@ -329,9 +329,52 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                     </tbody>
                   </table>
                 </div>
-              )}
             </section>
           </div>
+
+          {/* Popular Key Pages Traffic Breakdown */}
+          <section className="analytics-section" style={{ marginTop: "30px" }}>
+            <h3 className="section-title">Popular Key Pages Traffic Breakdown</h3>
+            <p className="section-subtitle">Real-time visitor counts and engagement breakdown for top pages</p>
+            
+            {pagesList.length === 0 ? (
+              <div className="analytics-empty">No page tracking data recorded yet.</div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "15px", marginTop: "15px" }}>
+                {[...pagesList]
+                  .sort((a, b) => b.views - a.views)
+                  .slice(0, 5)
+                  .map((p, idx) => {
+                    const maxViews = Math.max(...pagesList.map(o => o.views)) || 1;
+                    const pct = Math.round((p.views / maxViews) * 100);
+                    const isHighIntent = p.path.includes("pricing") || p.path.includes("contact") || p.path.includes("courses");
+                    return (
+                      <div key={p.path} style={{ backgroundColor: "rgba(19, 26, 40, 0.45)", backdropFilter: "blur(8px)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "8px", padding: "16px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <span style={{ fontSize: "14px", fontWeight: "bold", color: "#a1a1aa" }}>#{idx + 1}</span>
+                            <span style={{ fontFamily: "monospace", fontSize: "13px", color: "#fff", fontWeight: "600" }}>{p.path}</span>
+                            {isHighIntent && (
+                              <span style={{ fontSize: "10px", padding: "2px 6px", backgroundColor: "rgba(34, 197, 94, 0.15)", color: "#4ade80", borderRadius: "4px", fontWeight: "bold" }}>
+                                CONVERSION PAGE
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", gap: "20px", fontSize: "12px", color: "#a1a1aa" }}>
+                            <span>👀 <strong>{p.views}</strong> views</span>
+                            <span>⏱️ <strong>{formatDuration(p.avgDuration)}</strong> avg time</span>
+                            <span>📜 <strong>{p.avgScroll}%</strong> scroll depth</span>
+                          </div>
+                        </div>
+                        <div style={{ width: "100%", height: "8px", backgroundColor: "#09090b", borderRadius: "4px", overflow: "hidden" }}>
+                          <div style={{ width: `${pct}%`, height: "100%", backgroundColor: isHighIntent ? "#22c55e" : "#4f8cff", borderRadius: "4px", transition: "width 0.8s ease" }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </section>
         </>
       )}
 
