@@ -61,7 +61,20 @@ function normalizeSite(input) {
   s = s.split("/")[0]; // drop path
   s = s.split("?")[0]; // drop query
   s = s.split("#")[0]; // drop hash
-  return s.trim();
+  s = s.trim();
+  
+  if (
+    s === "localhost:3100" ||
+    s === "localhost:3000" ||
+    s === "localhost" ||
+    s === "127.0.0.1" ||
+    s === "127.0.0.1:3100" ||
+    s === "127.0.0.1:3000"
+  ) {
+    return "sashainfinity.com";
+  }
+  
+  return s;
 }
 
 // ---------------------------------------------------------------------------
@@ -1156,6 +1169,14 @@ app.get("/api/analytics/overview", async (req, res) => {
     const totalPages = await VisitModel.distinct("page", { site });
     const totalUsers = await SessionModel.countDocuments({ site });
     const totalLogins = await SessionModel.countDocuments({ site, identifiedEmail: { $ne: null } });
+    const hotLeads = await SessionModel.countDocuments({ site, hot: true });
+    
+    const totalDurationResult = await SessionModel.aggregate([
+      { $match: { site } },
+      { $group: { _id: null, totalSeconds: { $sum: "$totalSeconds" } } }
+    ]);
+    const totalSeconds = totalDurationResult.length ? totalDurationResult[0].totalSeconds : 0;
+    const minutesEngaged = Math.round(totalSeconds / 60);
     
     const perfData = await VisitModel.aggregate([
       { $match: { site, "performance.pageLoadMs": { $exists: true } } },
@@ -1174,6 +1195,8 @@ app.get("/api/analytics/overview", async (req, res) => {
       totalPages: totalPages.length,
       totalUsers,
       totalLogins,
+      hotLeads,
+      minutesEngaged,
       avgPageLoadMs,
       avgTtfbMs
     });

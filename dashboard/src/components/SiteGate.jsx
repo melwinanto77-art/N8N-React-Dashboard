@@ -20,10 +20,10 @@ export default function SiteGate({ onSubmit }) {
           Inbound Radar
         </div>
 
-        <h1 className="gate-title">See which companies are browsing your site</h1>
+        <h1 className="gate-title">De-anonymized B2B Site Analytics</h1>
         <p className="gate-sub">
-          Drop in the beacon, paste your domain, and watch de-anonymized
-          companies stream into a live sales feed scored by buying intent.
+          Paste your domain to analyze visiting organizations, user session lengths,
+          content engagement, and SEO/AEO/GEO optimization reports.
         </p>
 
         <form className="gate-form" onSubmit={handleSubmit}>
@@ -44,8 +44,8 @@ export default function SiteGate({ onSubmit }) {
 
         <ul className="gate-points">
           <li>Company-level only — never an individual.</li>
-          <li>ICP filtering keeps the feed to accounts worth your time.</li>
-          <li>Intent scoring surfaces hot leads in real time.</li>
+          <li>ICP filtering keeps the report to accounts worth your time.</li>
+          <li>Intent scoring surfaces high-intent target accounts.</li>
         </ul>
 
         <p className="gate-note">

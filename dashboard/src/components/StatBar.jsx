@@ -1,8 +1,8 @@
 // Six stat tiles summarizing the current feed and site performance.
-export default function StatBar({ sessions, overview }) {
-  const companies = sessions.length;
-  const hotLeads = sessions.filter((s) => s.hot).length;
-  const minutesEngaged = Math.round(
+export default function StatBar({ sessions = [], overview }) {
+  const companies = overview ? overview.totalUsers : sessions.length;
+  const hotLeads = overview ? overview.hotLeads : sessions.filter((s) => s.hot).length;
+  const minutesEngaged = overview ? overview.minutesEngaged : Math.round(
     sessions.reduce((sum, s) => sum + (s.totalSeconds || 0), 0) / 60
   );
 
@@ -11,7 +11,7 @@ export default function StatBar({ sessions, overview }) {
   const pageLoadSpeed = overview && overview.avgPageLoadMs ? `${overview.avgPageLoadMs}ms` : "280ms";
 
   const tiles = [
-    { label: "Companies on site", value: companies, key: "companies" },
+    { label: "Total Organizations", value: companies, key: "companies" },
     { label: "Hot leads", value: hotLeads, key: "hot", accent: hotLeads > 0 },
     { label: "Minutes engaged", value: minutesEngaged, key: "minutes" },
     { label: "Total pages tracked", value: totalPages, key: "pages" },

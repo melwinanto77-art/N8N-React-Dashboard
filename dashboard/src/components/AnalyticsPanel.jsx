@@ -25,7 +25,7 @@ function hostFromUrl(url) {
   }
 }
 
-export default function AnalyticsPanel({ site }) {
+export default function AnalyticsPanel({ site, onViewContacts }) {
   const [subTab, setSubTab] = useState("overview"); // "overview", "pages", "users", "logins", "aiReport"
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -251,6 +251,7 @@ export default function AnalyticsPanel({ site }) {
                         <th>Industry</th>
                         <th className="num">Page Views</th>
                         <th className="num">Max Intent</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -279,6 +280,15 @@ export default function AnalyticsPanel({ site }) {
                             <span className={`score-badge ${c.score >= 60 ? "score-badge-hot" : ""}`}>
                               {c.score}
                             </span>
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => onViewContacts({ domain: c.id, name: c.name, industry: c.industry, logo: c.logo })}
+                              style={{ padding: "4px 8px", fontSize: "11px", border: "1px solid #27272a", backgroundColor: "#18181b", color: "#fff", cursor: "pointer", borderRadius: "4px" }}
+                            >
+                              People
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -397,6 +407,7 @@ export default function AnalyticsPanel({ site }) {
                     <th className="num">Page Views</th>
                     <th className="num">Dwell Time</th>
                     <th className="num">Intent Score</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -430,6 +441,15 @@ export default function AnalyticsPanel({ site }) {
                           {s.score} {s.hot ? "🔥" : ""}
                         </span>
                       </td>
+                      <td>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => onViewContacts(s.company)}
+                          style={{ padding: "4px 8px", fontSize: "11px", border: "1px solid #27272a", backgroundColor: "#18181b", color: "#fff", cursor: "pointer", borderRadius: "4px" }}
+                        >
+                          People
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -460,6 +480,7 @@ export default function AnalyticsPanel({ site }) {
                     <th>Login Time</th>
                     <th>Last Page Visited</th>
                     <th className="num">Intent Score</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -499,6 +520,15 @@ export default function AnalyticsPanel({ site }) {
                           <span className={`score-badge ${s.hot ? "score-badge-hot" : ""}`}>
                             {s.score}
                           </span>
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => onViewContacts(s.company)}
+                            style={{ padding: "4px 8px", fontSize: "11px", border: "1px solid #27272a", backgroundColor: "#18181b", color: "#fff", cursor: "pointer", borderRadius: "4px" }}
+                          >
+                            People
+                          </button>
                         </td>
                       </tr>
                     );
