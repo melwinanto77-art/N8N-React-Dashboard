@@ -25,6 +25,25 @@ function hostFromUrl(url) {
   }
 }
 
+function SafeCompanyLogo({ logo, name }) {
+  const [logoOk, setLogoOk] = useState(true);
+  if (logoOk && logo) {
+    return (
+      <img
+        className="table-company-logo"
+        src={logo}
+        alt=""
+        onError={() => setLogoOk(false)}
+      />
+    );
+  }
+  return (
+    <div className="table-company-logo table-company-fallback">
+      {initials(name)}
+    </div>
+  );
+}
+
 export default function AnalyticsPanel({ site, onViewContacts }) {
   const [subTab, setSubTab] = useState("overview"); // "overview", "pages", "users", "logins", "aiReport"
   const [loading, setLoading] = useState(true);
@@ -259,13 +278,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                         <tr key={c.id}>
                           <td>
                             <div className="table-company">
-                              {c.logo ? (
-                                <img className="table-company-logo" src={c.logo} alt="" />
-                              ) : (
-                                <div className="table-company-logo table-company-fallback">
-                                  {initials(c.name)}
-                                </div>
-                              )}
+                              <SafeCompanyLogo logo={c.logo} name={c.name} />
                               <div>
                                 <div className="table-company-name">{c.name}</div>
                                 <div className="table-company-domain">{c.id}</div>
@@ -459,13 +472,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                     <tr key={s.id}>
                       <td>
                         <div className="table-company">
-                          {s.company.logo ? (
-                            <img className="table-company-logo" src={s.company.logo} alt="" />
-                          ) : (
-                            <div className="table-company-logo table-company-fallback">
-                              {initials(s.company.name)}
-                            </div>
-                          )}
+                          <SafeCompanyLogo logo={s.company.logo} name={s.company.name} />
                           <div>
                             <div className="table-company-name" style={{ color: "#f4f4f5" }}>{s.company.name}</div>
                             <div className="table-company-domain" style={{ fontSize: "11px" }}>{s.company.domain}</div>
@@ -535,13 +542,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                       <tr key={s.id}>
                         <td>
                           <div className="table-company">
-                            {s.company.logo ? (
-                              <img className="table-company-logo" src={s.company.logo} alt="" />
-                            ) : (
-                              <div className="table-company-logo table-company-fallback">
-                                {initials(s.company.name)}
-                              </div>
-                            )}
+                            <SafeCompanyLogo logo={s.company.logo} name={s.company.name} />
                             <div>
                               <div className="table-company-name" style={{ color: "#f4f4f5" }}>{s.company.name}</div>
                               <div className="table-company-domain" style={{ fontSize: "11px" }}>{s.company.domain}</div>
