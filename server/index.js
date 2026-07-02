@@ -30,6 +30,8 @@ import {
   SessionModel,
   VisitModel,
   SeoSnapshotModel,
+  AlertRuleModel,
+  AlertLogModel,
 } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -794,6 +796,83 @@ async function processEventAsync(site, ip, body) {
 
   broadcast(site, session);
   console.log(`[Queue] Event processed: ${company.name} on ${site}`);
+  evaluateAlertRules(site, session).catch((err) => {
+    console.error("[Alert Rule Error]:", err);
+  });
+}
+
+// Evaluate alert rules for a session and trigger logging + webhooks
+async function evaluateAlertRules(site, session) {
+  try {
+    const rules = await AlertRuleModel.find({ site, active: true });
+    for (const rule of rules) {
+      let triggered = false;
+      let desc = "";
+
+      if (rule.triggerType === "intent" && session.score >= rule.threshold) {
+        triggered = true;
+        desc = `Company ${session.company.name} reached Intent Score ${session.score} (Threshold: ${rule.threshold})`;
+      } else if (rule.triggerType === "page") {
+        const pageVisits = session.timeline.filter(t => t.path === rule.value || t.path.includes(rule.value));
+        if (pageVisits.length > 0) {
+          triggered = true;
+          desc = `Company ${session.company.name} visited target page path: ${rule.value}`;
+        }
+      } else if (rule.triggerType === "industry" && session.company.industry && session.company.industry.toLowerCase().includes(rule.value.toLowerCase())) {
+        triggered = true;
+        desc = `Company ${session.company.name} from target industry ${session.company.industry} visited the site.`;
+      }
+
+      if (triggered) {
+        // Check if we already logged this rule for this company in the last 1 hour (to prevent spam)
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const existingLog = await AlertLogModel.findOne({
+          site,
+          ruleName: rule.name,
+          domain: session.company.domain,
+          ts: { $gte: oneHourAgo }
+        });
+
+        if (!existingLog) {
+          // Log it!
+          const log = new AlertLogModel({
+            site,
+            ruleName: rule.name,
+            companyName: session.company.name,
+            domain: session.company.domain,
+            description: desc,
+            ts: new Date()
+          });
+          await log.save();
+
+          // Trigger webhook if configured!
+          if (rule.webhookUrl) {
+            fetch(rule.webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                event: "alert_triggered",
+                ruleName: rule.name,
+                site,
+                company: {
+                  name: session.company.name,
+                  domain: session.company.domain,
+                  industry: session.company.industry,
+                  country: session.company.country,
+                  city: session.company.city,
+                  score: session.score
+                },
+                description: desc,
+                timestamp: new Date().toISOString()
+              })
+            }).catch(err => console.error("Webhook fetch failed:", err.message));
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("evaluateAlertRules failed:", err);
+  }
 }
 
 // Full pipeline: REAL resolve IP -> org -> corporate filter -> aggregate -> broadcast.
@@ -854,6 +933,9 @@ app.post("/webhook", async (req, res) => {
   
   if (body.seo) await storeSeo(site, body.page || "/", body.url, body.seo);
   broadcast(site, session);
+  evaluateAlertRules(site, session).catch((err) => {
+    console.error("[Alert Rule Error]:", err);
+  });
 
   res.json({
     status: "tracked",
@@ -910,6 +992,9 @@ app.post("/ingest", async (req, res) => {
     );
     if (body.seo) await storeSeo(site, body.page || "/", body.url, body.seo);
     broadcast(site, session);
+    evaluateAlertRules(site, session).catch((err) => {
+      console.error("[Alert Rule Error]:", err);
+    });
 
     res.json({ status: "tracked" });
   } catch (err) {
@@ -1257,6 +1342,79 @@ app.get("/api/analytics/acquisition", async (req, res) => {
   }
 });
 
+// Geo Map Distribution Data
+app.get("/api/analytics/geo-distribution", async (req, res) => {
+  const site = normalizeSite(req.query.site);
+  if (!site) return res.status(400).json({ error: "site is required" });
+  try {
+    const sessions = await SessionModel.find({ site });
+    const geo = {};
+    sessions.forEach(s => {
+      const country = s.company.country || "Unknown";
+      const city = s.company.city || "Unknown";
+      const key = `${city}, ${country}`;
+      if (!geo[key]) {
+        geo[key] = {
+          city,
+          country,
+          companies: [],
+          count: 0
+        };
+      }
+      geo[key].companies.push({ name: s.company.name, domain: s.company.domain, score: s.score });
+      geo[key].count += 1;
+    });
+    res.json(Object.values(geo).sort((a, b) => b.count - a.count));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET Alert Rules
+app.get("/api/alerts/rules", async (req, res) => {
+  const site = normalizeSite(req.query.site);
+  if (!site) return res.status(400).json({ error: "site is required" });
+  try {
+    const rules = await AlertRuleModel.find({ site });
+    res.json(rules);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST Alert Rule
+app.post("/api/alerts/rules", async (req, res) => {
+  const { name, site, triggerType, threshold, value, webhookUrl } = req.body || {};
+  const normSite = normalizeSite(site);
+  if (!name || !normSite) return res.status(400).json({ error: "name and site are required" });
+  try {
+    const rule = new AlertRuleModel({
+      name,
+      site: normSite,
+      triggerType,
+      threshold: Number(threshold) || undefined,
+      value: value || undefined,
+      webhookUrl
+    });
+    await rule.save();
+    res.json(rule);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET Alert Logs
+app.get("/api/alerts/logs", async (req, res) => {
+  const site = normalizeSite(req.query.site);
+  if (!site) return res.status(400).json({ error: "site is required" });
+  try {
+    const logs = await AlertLogModel.find({ site }).sort({ ts: -1 }).limit(50);
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/analytics/overview", async (req, res) => {
   const site = normalizeSite(req.query.site);
   if (!site) return res.status(400).json({ error: "site is required" });
@@ -1443,6 +1601,29 @@ ${statsStr}`;
 async function startServer() {
   try {
     await connectDB();
+    
+    // Seed default alert rules if none exist
+    const count = await AlertRuleModel.countDocuments();
+    if (count === 0) {
+      await AlertRuleModel.create([
+        {
+          name: "High Value Corporate Leads Alert",
+          site: "sashainfinity.com",
+          triggerType: "intent",
+          threshold: 80,
+          webhookUrl: "http://localhost:5678/webhook/b2b-leads",
+          active: true
+        },
+        {
+          name: "Course Interest Alert",
+          site: "sashainfinity.com",
+          triggerType: "page",
+          value: "/courses",
+          active: true
+        }
+      ]);
+      console.log("Seeded default alert rules.");
+    }
   } catch (err) {
     console.error("Failed to connect to MongoDB:", err);
   }

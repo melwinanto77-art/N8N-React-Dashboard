@@ -72,18 +72,35 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
   const [usersList, setUsersList] = useState([]);
   const [loginsList, setLoginsList] = useState([]);
   const [acquisition, setAcquisition] = useState({ referrers: [], entryPages: [], campaigns: [] });
+  const [geoList, setGeoList] = useState([]);
+  const [rulesList, setRulesList] = useState([]);
+  const [logsList, setLogsList] = useState([]);
+  const [activeSimSession, setActiveSimSession] = useState(null);
 
   // AI Report states
   const [aiReport, setAiReport] = useState("");
   const [loadingAiReport, setLoadingAiReport] = useState(false);
   const [aiReportError, setAiReportError] = useState(null);
 
+
   useEffect(() => {
     async function fetchAllAnalytics() {
       setLoading(true);
       setError(null);
       try {
-        const [overviewRes, funnelRes, companiesRes, pagesIndRes, pagesRes, usersRes, loginsRes, acquisitionRes] = await Promise.all([
+        const [
+          overviewRes,
+          funnelRes,
+          companiesRes,
+          pagesIndRes,
+          pagesRes,
+          usersRes,
+          loginsRes,
+          acquisitionRes,
+          geoRes,
+          rulesRes,
+          logsRes
+        ] = await Promise.all([
           fetch(`/api/analytics/overview?site=${encodeURIComponent(site)}`),
           fetch(`/api/analytics/conversion-funnel?site=${encodeURIComponent(site)}`),
           fetch(`/api/analytics/top-companies?site=${encodeURIComponent(site)}`),
@@ -91,14 +108,41 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
           fetch(`/api/analytics/pages?site=${encodeURIComponent(site)}`),
           fetch(`/api/analytics/users?site=${encodeURIComponent(site)}`),
           fetch(`/api/analytics/new-logins?site=${encodeURIComponent(site)}`),
-          fetch(`/api/analytics/acquisition?site=${encodeURIComponent(site)}`)
+          fetch(`/api/analytics/acquisition?site=${encodeURIComponent(site)}`),
+          fetch(`/api/analytics/geo-distribution?site=${encodeURIComponent(site)}`),
+          fetch(`/api/alerts/rules?site=${encodeURIComponent(site)}`),
+          fetch(`/api/alerts/logs?site=${encodeURIComponent(site)}`)
         ]);
 
-        if (!overviewRes.ok || !funnelRes.ok || !companiesRes.ok || !pagesIndRes.ok || !pagesRes.ok || !usersRes.ok || !loginsRes.ok || !acquisitionRes.ok) {
+        if (
+          !overviewRes.ok ||
+          !funnelRes.ok ||
+          !companiesRes.ok ||
+          !pagesIndRes.ok ||
+          !pagesRes.ok ||
+          !usersRes.ok ||
+          !loginsRes.ok ||
+          !acquisitionRes.ok ||
+          !geoRes.ok ||
+          !rulesRes.ok ||
+          !logsRes.ok
+        ) {
           throw new Error("Failed to fetch some analytics data endpoints.");
         }
 
-        const [overviewData, funnelData, companiesData, pagesIndData, pagesData, usersData, loginsData, acquisitionData] = await Promise.all([
+        const [
+          overviewData,
+          funnelData,
+          companiesData,
+          pagesIndData,
+          pagesData,
+          usersData,
+          loginsData,
+          acquisitionData,
+          geoData,
+          rulesData,
+          logsData
+        ] = await Promise.all([
           overviewRes.json(),
           funnelRes.json(),
           companiesRes.json(),
@@ -106,7 +150,10 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
           pagesRes.json(),
           usersRes.json(),
           loginsRes.json(),
-          acquisitionRes.json()
+          acquisitionRes.json(),
+          geoRes.json(),
+          rulesRes.json(),
+          logsRes.json()
         ]);
 
         setOverview(overviewData);
@@ -117,6 +164,9 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
         setUsersList(usersData);
         setLoginsList(loginsData);
         setAcquisition(acquisitionData);
+        setGeoList(geoData);
+        setRulesList(rulesData);
+        setLogsList(logsData);
       } catch (err) {
         console.error("Analytics load error:", err);
         setError(err.message || "An error occurred while loading dashboard analytics.");
@@ -188,8 +238,10 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
           { id: "overview", name: "Overview & Funnel" },
           { id: "pages", name: `Pages (${pagesList.length})` },
           { id: "acquisition", name: "Acquisition & Entry Paths" },
+          { id: "geoMap", name: "🗺️ Geo Map" },
           { id: "users", name: `User Sessions (${usersList.length})` },
           { id: "logins", name: `New Logins (${loginsList.length})` },
+          { id: "alerts", name: "⚡ Alert Rules" },
           { id: "aiReport", name: "✨ AI Analyst" }
         ].map((t) => (
           <button
@@ -627,6 +679,13 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                         >
                           People
                         </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setActiveSimSession(s)}
+                          style={{ padding: "4px 8px", fontSize: "11px", border: "1px solid #27272a", backgroundColor: "#22c55e", color: "#fff", cursor: "pointer", borderRadius: "4px", marginLeft: "6px" }}
+                        >
+                          🎬 Simulate
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -767,6 +826,313 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
             </div>
           )}
         </section>
+      )}
+
+      {/* 6. GEO MAP SUB-TAB */}
+      {subTab === "geoMap" && (
+        <section className="analytics-section">
+          <h3 className="section-title">🗺️ Firmographic Geo Map</h3>
+          <p className="section-subtitle">Geographic density of de-anonymized B2B buyer accounts</p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "20px", marginTop: "20px" }}>
+            {/* Styled Map Container */}
+            <div style={{ background: "#18181b", padding: "20px", borderRadius: "8px", border: "1px solid #27272a", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "350px", position: "relative", overflow: "hidden" }}>
+              <div style={{ position: "absolute", inset: 0, opacity: 0.05, backgroundImage: "radial-gradient(#22c55e 1px, transparent 1px)", backgroundSize: "16px 16px" }}></div>
+              <div style={{ width: "100%", height: "240px", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ position: "absolute", top: "40%", left: "20%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div className="pulsing-dot" style={{ width: "14px", height: "14px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 10px #22c55e" }} />
+                  <span style={{ fontSize: "9px", color: "#a1a1aa", marginTop: "4px", backgroundColor: "#09090b", padding: "2px 4px", borderRadius: "3px" }}>North America</span>
+                </div>
+                <div style={{ position: "absolute", top: "35%", left: "50%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div className="pulsing-dot" style={{ width: "12px", height: "12px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 10px #22c55e" }} />
+                  <span style={{ fontSize: "9px", color: "#a1a1aa", marginTop: "4px", backgroundColor: "#09090b", padding: "2px 4px", borderRadius: "3px" }}>Europe</span>
+                </div>
+                <div style={{ position: "absolute", top: "55%", left: "75%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div className="pulsing-dot" style={{ width: "16px", height: "16px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 10px #22c55e" }} />
+                  <span style={{ fontSize: "9px", color: "#a1a1aa", marginTop: "4px", backgroundColor: "#09090b", padding: "2px 4px", borderRadius: "3px" }}>Asia/India</span>
+                </div>
+                <div style={{ position: "absolute", top: "70%", left: "30%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 10px #22c55e" }} />
+                  <span style={{ fontSize: "9px", color: "#a1a1aa", marginTop: "4px", backgroundColor: "#09090b", padding: "2px 4px", borderRadius: "3px" }}>South America</span>
+                </div>
+                <div style={{ fontSize: "16px", fontWeight: "bold", color: "#71717a", letterSpacing: "2px", textTransform: "uppercase" }}>Visual Intent Hub Map</div>
+              </div>
+              <div style={{ width: "100%", borderTop: "1px solid #27272a", paddingTop: "15px", display: "flex", justifyContent: "space-around" }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "18px", fontWeight: "bold", color: "#22c55e" }}>{geoList.length}</div>
+                  <div style={{ fontSize: "11px", color: "#71717a" }}>Unique Cities</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "18px", fontWeight: "bold", color: "#22c55e" }}>
+                    {new Set(geoList.map(g => g.country)).size}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#71717a" }}>Countries</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Geo Breakdown Sidebar */}
+            <div style={{ background: "#18181b", padding: "20px", borderRadius: "8px", border: "1px solid #27272a", maxHeight: "350px", overflowY: "auto" }}>
+              <h4 style={{ margin: "0 0 15px 0", fontSize: "14px", color: "#e4e4e7" }}>Session Density by City</h4>
+              {geoList.length === 0 ? (
+                <div style={{ color: "#71717a", fontSize: "13px" }}>No geographical data available yet.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {geoList.map((g, i) => {
+                    const maxVal = geoList[0] ? geoList[0].count : 1;
+                    const pct = Math.max(10, Math.min(100, (g.count / maxVal) * 100));
+                    return (
+                      <div key={i} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
+                          <span style={{ color: "#f4f4f5", fontWeight: "500" }}>{g.city}, {g.country}</span>
+                          <span style={{ color: "#22c55e", fontWeight: "bold" }}>{g.count} leads</span>
+                        </div>
+                        <div style={{ width: "100%", height: "6px", backgroundColor: "#27272a", borderRadius: "3px", overflow: "hidden" }}>
+                          <div style={{ width: `${pct}%`, height: "100%", backgroundColor: "#22c55e", borderRadius: "3px" }}></div>
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#71717a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          Org: {g.companies.map(c => c.name).join(", ")}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          <style>{`
+            .pulsing-dot {
+              animation: ping 1.8s infinite;
+            }
+            @keyframes ping {
+              0% { transform: scale(1); opacity: 1; }
+              70% { transform: scale(2.2); opacity: 0; }
+              100% { transform: scale(2.2); opacity: 0; }
+            }
+          `}</style>
+        </section>
+      )}
+
+      {/* 7. ALERT RULES & WEBHOOKS SUB-TAB */}
+      {subTab === "alerts" && (
+        <section className="analytics-section">
+          <h3 className="section-title">⚡ Intent Alert Webhook Rules</h3>
+          <p className="section-subtitle">Configure real-time automated triggers to alert your Slack or webhook whenever corporate intent is recorded</p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "25px", marginTop: "20px" }}>
+            {/* Left Column: Create & Manage Rules */}
+            <div style={{ background: "#18181b", padding: "20px", borderRadius: "8px", border: "1px solid #27272a", display: "flex", flexDirection: "column", gap: "15px" }}>
+              <h4 style={{ margin: "0 0 5px 0", fontSize: "15px", color: "#e4e4e7" }}>Create Custom Alert Rule</h4>
+              
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.target;
+                const payload = {
+                  name: form.ruleName.value,
+                  site,
+                  triggerType: form.triggerType.value,
+                  threshold: form.triggerType.value === "intent" ? form.triggerValue.value : undefined,
+                  value: form.triggerType.value !== "intent" ? form.triggerValue.value : undefined,
+                  webhookUrl: form.webhookUrl.value
+                };
+                try {
+                  const res = await fetch("/api/alerts/rules", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                  });
+                  if (res.ok) {
+                    const rule = await res.json();
+                    setRulesList([...rulesList, rule]);
+                    form.reset();
+                  }
+                } catch (err) {
+                  console.error(err);
+                }
+              }} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", color: "#a1a1aa", marginBottom: "4px" }}>Rule Name</label>
+                  <input name="ruleName" required placeholder="e.g. Hot Lead Alert" style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "13px" }} />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", color: "#a1a1aa", marginBottom: "4px" }}>Trigger Type</label>
+                    <select name="triggerType" defaultValue="intent" style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "13px" }}>
+                      <option value="intent">Intent Score Threshold</option>
+                      <option value="page">Page Path Visit</option>
+                      <option value="industry">Company Industry</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", color: "#a1a1aa", marginBottom: "4px" }}>Threshold / Value</label>
+                    <input name="triggerValue" required placeholder="e.g. SaaS / 80 / /pricing" style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "13px" }} />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", color: "#a1a1aa", marginBottom: "4px" }}>Webhook URL (n8n / Slack)</label>
+                  <input name="webhookUrl" placeholder="http://localhost:5678/webhook/b2b-leads" style={{ width: "100%", padding: "8px", borderRadius: "4px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "13px" }} />
+                </div>
+
+                <button type="submit" style={{ padding: "10px", borderRadius: "4px", backgroundColor: "#22c55e", color: "#fff", border: "none", cursor: "pointer", fontWeight: "bold", marginTop: "5px" }}>
+                  Create Rule
+                </button>
+              </form>
+
+              <h4 style={{ margin: "15px 0 5px 0", fontSize: "14px", color: "#e4e4e7" }}>Active Rules</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {rulesList.map((r, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#09090b", padding: "10px", borderRadius: "4px", border: "1px solid #27272a" }}>
+                    <div>
+                      <div style={{ fontSize: "12px", color: "#fff", fontWeight: "600" }}>{r.name}</div>
+                      <div style={{ fontSize: "10px", color: "#71717a" }}>
+                        If {r.triggerType} equals/exceeds {r.value || r.threshold || 80} {"\u2192"} Send Webhook
+                      </div>
+                    </div>
+                    <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "3px", backgroundColor: r.active ? "rgba(34,197,94,0.15)" : "#27272a", color: r.active ? "#22c55e" : "#a1a1aa" }}>
+                      {r.active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right Column: Triggered Logs Feed */}
+            <div style={{ background: "#18181b", padding: "20px", borderRadius: "8px", border: "1px solid #27272a", display: "flex", flexDirection: "column", gap: "10px", maxHeight: "450px", overflowY: "auto" }}>
+              <h4 style={{ margin: "0 0 5px 0", fontSize: "15px", color: "#e4e4e7" }}>Triggered Alerts History</h4>
+              {logsList.length === 0 ? (
+                <div style={{ color: "#71717a", fontSize: "13px" }}>No alerts have been tripped yet.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {logsList.map((log, i) => (
+                    <div key={i} style={{ borderLeft: "3px solid #eab308", background: "#09090b", padding: "10px", borderRadius: "0 4px 4px 0", display: "flex", flexDirection: "column", gap: "2px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                        <span style={{ color: "#e4e4e7", fontWeight: "bold" }}>🚨 {log.ruleName}</span>
+                        <span style={{ color: "#71717a" }}>
+                          {new Date(log.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#fff", margin: "2px 0" }}>{log.description}</div>
+                      <div style={{ fontSize: "10px", color: "#22c55e" }}>domain: {log.domain}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 8. SCROLL HEATMAP & SESSION DWELL SIMULATOR MODAL */}
+      {activeSimSession && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+          <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", width: "80%", maxWidth: "800px", height: "85%", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            {/* Modal Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #27272a" }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: "16px", color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>
+                  🎬 Session Dwell & Scroll Heatmap Simulator
+                </h4>
+                <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#71717a" }}>
+                  Analyzing {activeSimSession.company.name} on {site}
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveSimSession(null)}
+                style={{ background: "transparent", border: "none", color: "#a1a1aa", fontSize: "20px", cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", flex: 1, overflow: "hidden" }}>
+              {/* Left sidebar: Session timeline paths */}
+              <div style={{ borderRight: "1px solid #27272a", padding: "20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <h5 style={{ margin: "0 0 5px 0", fontSize: "13px", color: "#fff" }}>Pages Visited</h5>
+                {activeSimSession.timeline.map((entry, idx) => (
+                  <div key={idx} style={{ padding: "10px", borderRadius: "6px", backgroundColor: "#09090b", border: "1px solid #27272a", display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div style={{ fontSize: "12px", color: "#22c55e", fontWeight: "600", wordBreak: "break-all" }}>{entry.path}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#71717a" }}>
+                      <span>⏱️ {entry.durationSec || 15}s dwell</span>
+                      <span>📜 {entry.scrollDepth || 90}% scroll</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Right panel: Stylized Webpage Wireframe Heatmap simulator */}
+              <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "15px", overflowY: "auto" }}>
+                <h5 style={{ margin: 0, fontSize: "13px", color: "#fff" }}>Webpage Wireframe Mock & Heatmap</h5>
+                
+                {/* Visual simulator wrapper */}
+                <div style={{ flex: 1, minHeight: "450px", border: "1px solid #27272a", borderRadius: "6px", backgroundColor: "#09090b", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                  
+                  {/* Mock browser address bar */}
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", backgroundColor: "#18181b", padding: "8px 12px", borderBottom: "1px solid #27272a", fontSize: "11px", color: "#71717a" }}>
+                    <span style={{ color: "#ef4444" }}>●</span><span style={{ color: "#eab308" }}>●</span><span style={{ color: "#22c55e" }}>●</span>
+                    <div style={{ flex: 1, backgroundColor: "#09090b", padding: "2px 10px", borderRadius: "3px", textAlign: "center", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                      {site}{activeSimSession.timeline[0]?.path || "/"}
+                    </div>
+                  </div>
+
+                  {/* Wireframe webpage layout */}
+                  <div style={{ flex: 1, padding: "20px", position: "relative", display: "flex", flexDirection: "column", gap: "15px", overflowY: "auto" }}>
+                    {/* Max Scroll Depth indicator line */}
+                    <div style={{ position: "absolute", top: `${activeSimSession.timeline[0]?.scrollDepth || 85}%`, left: 0, right: 0, borderTop: "2px dashed #22c55e", zIndex: 10 }}>
+                      <span style={{ position: "absolute", right: "10px", top: "-18px", backgroundColor: "#22c55e", color: "#fff", fontSize: "9px", padding: "2px 6px", borderRadius: "3px", fontWeight: "bold" }}>
+                        Max Scroll Depth: {activeSimSession.timeline[0]?.scrollDepth || 85}%
+                      </span>
+                    </div>
+
+                    {/* Section 1: Header */}
+                    <div style={{ border: "1px solid #27272a", borderRadius: "4px", padding: "15px", background: "rgba(34, 197, 94, 0.05)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                        <span style={{ fontSize: "11px", color: "#fff", fontWeight: "bold" }}>NAVBAR & HEADER HERO</span>
+                        <span style={{ fontSize: "9px", color: "#22c55e", padding: "2px 4px", borderRadius: "3px", backgroundColor: "rgba(34,197,94,0.15)" }}>Low Dwell (Fast Scroll)</span>
+                      </div>
+                      <div style={{ width: "60%", height: "8px", background: "#27272a", marginBottom: "6px" }}></div>
+                      <div style={{ width: "40%", height: "6px", background: "#27272a" }}></div>
+                    </div>
+
+                    {/* Section 2: Features Grid */}
+                    <div style={{ border: "1px solid #27272a", borderRadius: "4px", padding: "15px", background: "rgba(59, 130, 246, 0.08)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                        <span style={{ fontSize: "11px", color: "#fff", fontWeight: "bold" }}>FEATURES GRID</span>
+                        <span style={{ fontSize: "9px", color: "#3b82f6", padding: "2px 4px", borderRadius: "3px", backgroundColor: "rgba(59,130,246,0.15)" }}>Medium Dwell (Read Details)</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                        <div style={{ height: "30px", background: "#27272a", borderRadius: "3px" }}></div>
+                        <div style={{ height: "30px", background: "#27272a", borderRadius: "3px" }}></div>
+                      </div>
+                    </div>
+
+                    {/* Section 3: Pricing Table - Dwell Hotspot! */}
+                    <div style={{ border: "1px solid #ef4444", borderRadius: "4px", padding: "15px", background: "rgba(239, 68, 68, 0.12)", boxShadow: "0 0 10px rgba(239,68,68,0.1)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                        <span style={{ fontSize: "11px", color: "#ef4444", fontWeight: "bold" }}>💳 COURSE PRICING / LEAD FORM</span>
+                        <span style={{ fontSize: "9px", color: "#ef4444", padding: "2px 4px", borderRadius: "3px", backgroundColor: "rgba(239,68,68,0.15)", fontWeight: "bold" }}>🔥 HOTSPOT: High Dwell (Long Hold)</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <div style={{ flex: 1, height: "45px", background: "#27272a", borderRadius: "3px" }}></div>
+                        <div style={{ flex: 1, height: "45px", background: "#27272a", borderRadius: "3px" }}></div>
+                      </div>
+                    </div>
+
+                    {/* Section 4: Footer */}
+                    <div style={{ border: "1px solid #27272a", borderRadius: "4px", padding: "15px", background: "rgba(39, 39, 42, 0.1)", opacity: (activeSimSession.timeline[0]?.scrollDepth || 85) < 95 ? 0.3 : 1 }}>
+                      <span style={{ fontSize: "11px", color: "#71717a", fontWeight: "bold" }}>FOOTER & LINKS</span>
+                      <div style={{ width: "30%", height: "6px", background: "#27272a", marginTop: "8px" }}></div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
       )}
     </div>
   );

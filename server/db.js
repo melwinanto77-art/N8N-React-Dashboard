@@ -125,9 +125,36 @@ const SeoSnapshotSchema = new Schema({
 
 SeoSnapshotSchema.index({ site: 1, path: 1 }, { unique: true });
 
+// Alert Rule schema
+const AlertRuleSchema = new Schema({
+  name: { type: String, required: true },
+  site: { type: String, required: true },
+  triggerType: { type: String, enum: ["intent", "page", "industry"], default: "intent" },
+  threshold: Number, // e.g. score >= 80
+  value: String, // e.g. path equals /pricing or industry equals SaaS
+  webhookUrl: String,
+  active: { type: Boolean, default: true }
+}, {
+  timestamps: true
+});
+
+// Alert Log schema
+const AlertLogSchema = new Schema({
+  site: { type: String, required: true },
+  ruleName: String,
+  companyName: String,
+  domain: String,
+  description: String,
+  ts: { type: Date, default: Date.now }
+}, {
+  timestamps: true
+});
+
 export const SessionModel = mongoose.model("Session", SessionSchema);
 export const VisitModel = mongoose.model("Visit", VisitSchema);
 export const SeoSnapshotModel = mongoose.model("SeoSnapshot", SeoSnapshotSchema);
+export const AlertRuleModel = mongoose.model("AlertRule", AlertRuleSchema);
+export const AlertLogModel = mongoose.model("AlertLog", AlertLogSchema);
 
 export async function connectDB() {
   const uri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/b2b-radar";
