@@ -710,6 +710,11 @@ app.get("/radar.js", (req, res) => {
   res.send(src);
 });
 
+// Silence Chrome DevTools Automatic Workspace Folder requests
+app.get("/.well-known/appspecific/com.chrome.devtools.json", (req, res) => {
+  res.json([]);
+});
+
 // Health.
 app.get("/health", async (req, res) => {
   try {
