@@ -762,6 +762,8 @@ async function processEventAsync(site, ip, body) {
     return;
   }
 
+  const eventTs = new Date();
+
   const clientInfo = {
     ...extractClient(body),
     clientId: body.clientId || null,
@@ -773,7 +775,8 @@ async function processEventAsync(site, ip, body) {
     scrollDepth: body.scrollDepth || 0,
     utm: body.utm || {},
     performance: body.performance || {},
-    email: body.email || null
+    email: body.email || null,
+    ts: eventTs
   };
 
   const session = await aggregateVisit(
@@ -781,7 +784,7 @@ async function processEventAsync(site, ip, body) {
     company,
     body.page || "/",
     body.durationSec,
-    body.ts,
+    eventTs,
     clientInfo
   );
 
@@ -823,6 +826,8 @@ app.post("/webhook", async (req, res) => {
     return;
   }
 
+  const eventTs = new Date();
+
   const clientInfo = {
     ...extractClient(body),
     clientId: body.clientId || null,
@@ -834,7 +839,8 @@ app.post("/webhook", async (req, res) => {
     scrollDepth: body.scrollDepth || 0,
     utm: body.utm || {},
     performance: body.performance || {},
-    email: body.email || null
+    email: body.email || null,
+    ts: eventTs
   };
 
   const session = await aggregateVisit(
@@ -842,7 +848,7 @@ app.post("/webhook", async (req, res) => {
     company,
     body.page || "/",
     body.durationSec,
-    body.ts,
+    eventTs,
     clientInfo
   );
   

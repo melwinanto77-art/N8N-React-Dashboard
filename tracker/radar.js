@@ -28,20 +28,18 @@
     }
   }
 
-  // Fetch the real public IP up front and trigger pageview.
+  // Trigger pageview immediately on load
+  sendPageview();
+
+  // Fetch the real public IP in the background for the unload beacon
   try {
     fetch("https://api.ipify.org?format=json")
       .then((r) => r.json())
       .then((d) => {
         publicIp = d && d.ip;
-        sendPageview();
       })
-      .catch(() => {
-        sendPageview();
-      });
-  } catch (e) {
-    sendPageview();
-  }
+      .catch(() => {});
+  } catch (e) {}
 
   // Track furthest scroll depth (%) as a real engagement signal.
   window.addEventListener(
