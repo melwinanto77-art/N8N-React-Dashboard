@@ -77,10 +77,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
   const [logsList, setLogsList] = useState([]);
   const [activeSimSession, setActiveSimSession] = useState(null);
 
-  // AI Report states
-  const [aiReport, setAiReport] = useState("");
-  const [loadingAiReport, setLoadingAiReport] = useState(false);
-  const [aiReportError, setAiReportError] = useState(null);
+
 
 
   useEffect(() => {
@@ -180,30 +177,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
     }
   }, [site]);
 
-  async function generateAiReport() {
-    setLoadingAiReport(true);
-    setAiReportError(null);
-    try {
-      const res = await fetch(`/api/analytics/ai-site-analysis?site=${encodeURIComponent(site)}`);
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Failed to generate AI report.");
-      }
-      const data = await res.json();
-      setAiReport(data.report);
-    } catch (err) {
-      setAiReportError(err.message);
-    } finally {
-      setLoadingAiReport(false);
-    }
-  }
 
-  // Trigger AI report generation when switching to the tab
-  useEffect(() => {
-    if (subTab === "aiReport" && !aiReport && !loadingAiReport) {
-      generateAiReport();
-    }
-  }, [subTab]);
 
   if (loading) {
     return (
@@ -241,8 +215,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
           { id: "geoMap", name: "🗺️ Geo Map" },
           { id: "users", name: `User Sessions (${usersList.length})` },
           { id: "logins", name: `New Logins (${loginsList.length})` },
-          { id: "alerts", name: "⚡ Alert Rules" },
-          { id: "aiReport", name: "✨ AI Analyst" }
+          { id: "alerts", name: "⚡ Alert Rules" }
         ].map((t) => (
           <button
             key={t.id}
@@ -771,62 +744,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
         </section>
       )}
 
-      {/* 5. AI ANALYST REPORT SUB-TAB */}
-      {subTab === "aiReport" && (
-        <section className="analytics-section" style={{ border: "1px solid rgba(34, 197, 94, 0.4)", padding: "24px", borderRadius: "8px", backgroundColor: "rgba(34, 197, 94, 0.03)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-            <div>
-              <h3 className="section-title" style={{ margin: 0, color: "#22c55e", display: "flex", alignItems: "center", gap: "8px" }}>
-                ✨ Chief AI Executive Site Report
-              </h3>
-              <p className="section-subtitle" style={{ margin: "4px 0 0 0" }}>Local Llama-3 AI analysis of all pages, visitors, and logins</p>
-            </div>
-            <button
-              onClick={generateAiReport}
-              disabled={loadingAiReport}
-              style={{
-                padding: "8px 16px",
-                borderRadius: "6px",
-                border: "1px solid #22c55e",
-                backgroundColor: "transparent",
-                color: "#22c55e",
-                cursor: "pointer",
-                fontWeight: "600",
-                fontSize: "13px"
-              }}
-            >
-              {loadingAiReport ? "Analyzing..." : "🔄 Refresh Analysis"}
-            </button>
-          </div>
 
-          {loadingAiReport ? (
-            <div style={{ textAlign: "center", padding: "40px 0", color: "#a1a1aa" }}>
-              <span className="spinner" style={{ display: "inline-block", width: "30px", height: "30px", border: "3px solid #27272a", borderTopColor: "#22c55e", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-              <p style={{ marginTop: "16px" }}>Llama-3 is analyzing your traffic data... (This can take 10-15 seconds)</p>
-            </div>
-          ) : aiReportError ? (
-            <div style={{ padding: "20px", border: "1px solid #7f1d1d", borderRadius: "6px", backgroundColor: "rgba(127, 29, 29, 0.2)", color: "#fca5a5" }}>
-              <strong>AI Analysis Offline:</strong> {aiReportError}
-              <div style={{ marginTop: "8px", fontSize: "12px", color: "#a1a1aa" }}>
-                Make sure Ollama is running in your taskbar and you have run <code>ollama run llama3</code> in your terminal.
-              </div>
-            </div>
-          ) : (
-            <div 
-              style={{ 
-                color: "#e4e4e7", 
-                fontSize: "14px", 
-                lineHeight: "1.6", 
-                whiteSpace: "pre-wrap", 
-                textAlign: "left",
-                fontFamily: "system-ui, -apple-system, sans-serif"
-              }}
-            >
-              {aiReport}
-            </div>
-          )}
-        </section>
-      )}
 
       {/* 6. GEO MAP SUB-TAB */}
       {subTab === "geoMap" && (
