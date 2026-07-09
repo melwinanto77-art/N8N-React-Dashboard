@@ -77,11 +77,133 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
   const [logsList, setLogsList] = useState([]);
   const [activeSimSession, setActiveSimSession] = useState(null);
 
+  // Dynamic B2B filters & search
+  const [searchQuery, setSearchQuery] = useState("");
+  const [industryFilter, setIndustryFilter] = useState("");
+  const [sizeFilter, setSizeFilter] = useState("");
 
+  // B2B Trend Data
+  const [trendRange, setTrendRange] = useState("7d");
+  const [trendList, setTrendList] = useState([]);
+  const [loadingTrend, setLoadingTrend] = useState(false);
 
+  // Intent score configurator
+  const [weightHigh, setWeightHigh] = useState(40);
+  const [weightMedium, setWeightMedium] = useState(15);
+  const [weightLow, setWeightLow] = useState(5);
+  const [dwellBonusPer30s, setDwellBonusPer30s] = useState(1);
+  const [highIntentPagesText, setHighIntentPagesText] = useState("/pricing, /checkout");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSuccess, setSettingsSuccess] = useState(false);
 
+  // Fetch Intent Settings
+  async function fetchIntentSettings() {
+    if (!site) return;
+    try {
+      const res = await fetch(`/api/settings/intent?site=${encodeURIComponent(site)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setWeightHigh(data.weightHigh ?? 40);
+        setWeightMedium(data.weightMedium ?? 15);
+        setWeightLow(data.weightLow ?? 5);
+        setDwellBonusPer30s(data.dwellBonusPer30s ?? 1);
+        setHighIntentPagesText(data.highIntentPages ? data.highIntentPages.join(", ") : "/pricing, /checkout");
+      }
+    } catch (err) {
+      console.error("Failed to fetch intent settings:", err);
+    }
+  }
+
+  // Fetch Historical Trend
+  async function fetchTrend() {
+    if (!site) return;
+    setLoadingTrend(true);
+    try {
+      const res = await fetch(`/api/analytics/historical-trend?site=${encodeURIComponent(site)}&range=${trendRange}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTrendList(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch historical trend:", err);
+    } finally {
+      setLoadingTrend(false);
+    }
+  }
+
+  // Save Settings
+  async function handleSaveSettings(e) {
+    e.preventDefault();
+    setSavingSettings(true);
+    setSettingsSuccess(false);
+    try {
+      const list = highIntentPagesText
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean);
+        
+      const res = await fetch("/api/settings/intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site,
+          weightHigh: Number(weightHigh),
+          weightMedium: Number(weightMedium),
+          weightLow: Number(weightLow),
+          dwellBonusPer30s: Number(dwellBonusPer30s),
+          highIntentPages: list
+        })
+      });
+      if (res.ok) {
+        setSettingsSuccess(true);
+        setTimeout(() => setSettingsSuccess(false), 3000);
+        // Refresh analytics since scores are re-calculated on the backend
+        fetchAllAnalytics();
+      }
+    } catch (err) {
+      console.error("Failed to save settings:", err);
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  // Export Leads to CSV
+  function handleExportCSV(listToExport) {
+    const headers = ["Company Name", "Domain", "Industry", "Size", "Location", "Page Views", "Dwell Time", "Intent Score", "Identified Email", "Last Seen"];
+    const rows = listToExport.map(s => [
+      `"${s.company.name.replace(/"/g, '""')}"`,
+      s.company.domain,
+      s.company.industry || "N/A",
+      s.company.size || "N/A",
+      `"${[s.company.city, s.company.country].filter(Boolean).join(", ").replace(/"/g, '""')}"`,
+      s.pageViews,
+      `${Math.round(s.totalSeconds)}s`,
+      s.score,
+      s.identifiedEmail || "None",
+      new Date(s.lastSeen).toLocaleString()
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `b2b_inbound_radar_leads_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Fetch trend on load/range change
   useEffect(() => {
-    async function fetchAllAnalytics() {
+    fetchTrend();
+  }, [site, trendRange]);
+
+  // Fetch intent settings on load
+  useEffect(() => {
+    fetchIntentSettings();
+  }, [site]);
+
+  async function fetchAllAnalytics() {
       setLoading(true);
       setError(null);
       try {
@@ -172,6 +294,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
       }
     }
 
+  useEffect(() => {
     if (site) {
       fetchAllAnalytics();
     }
@@ -215,7 +338,8 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
           { id: "geoMap", name: "🗺️ Geo Map" },
           { id: "users", name: `User Sessions (${usersList.length})` },
           { id: "logins", name: `New Logins (${loginsList.length})` },
-          { id: "alerts", name: "⚡ Alert Rules" }
+          { id: "alerts", name: "⚡ Alert Rules" },
+          { id: "settings", name: "⚙️ Settings" }
         ].map((t) => (
           <button
             key={t.id}
@@ -270,6 +394,148 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
               </div>
             </div>
           )}
+
+          {/* B2B Traffic & Intent Trends Chart */}
+          <section className="analytics-section" style={{ marginBottom: "30px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+              <div>
+                <h3 className="section-title" style={{ margin: 0 }}>📈 B2B Traffic & Intent Trends</h3>
+                <p className="section-subtitle" style={{ margin: "4px 0 0 0" }}>Historical unique company visits vs pageview volume</p>
+              </div>
+              <div style={{ display: "flex", gap: "6px", background: "#09090b", padding: "4px", borderRadius: "6px", border: "1px solid #27272a" }}>
+                {[
+                  { id: "today", name: "Today" },
+                  { id: "7d", name: "7 Days" },
+                  { id: "30d", name: "30 Days" }
+                ].map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => setTrendRange(r.id)}
+                    style={{
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      fontWeight: "600",
+                      borderRadius: "4px",
+                      border: "none",
+                      cursor: "pointer",
+                      backgroundColor: trendRange === r.id ? "#22c55e" : "transparent",
+                      color: trendRange === r.id ? "#fff" : "#a1a1aa",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    {r.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ background: "#18181b", border: "1px solid #27272a", borderRadius: "8px", padding: "20px", position: "relative" }}>
+              {loadingTrend ? (
+                <div style={{ height: "220px", display: "flex", alignItems: "center", justifyContent: "center", color: "#a1a1aa" }}>
+                  <span className="spinner" style={{ display: "inline-block", width: "24px", height: "24px", border: "2px solid #27272a", borderTopColor: "#22c55e", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                  <span style={{ marginLeft: "10px" }}>Loading trend data...</span>
+                </div>
+              ) : trendList.length === 0 ? (
+                <div style={{ height: "220px", display: "flex", alignItems: "center", justifyContent: "center", color: "#71717a" }}>
+                  No trend data recorded yet.
+                </div>
+              ) : (
+                <div>
+                  {/* Legend */}
+                  <div style={{ display: "flex", gap: "20px", marginBottom: "15px", fontSize: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e4e4e7" }}>
+                      <span style={{ display: "inline-block", width: "12px", height: "3px", backgroundColor: "#22c55e", borderRadius: "2px" }} />
+                      Unique Companies
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e4e4e7" }}>
+                      <span style={{ display: "inline-block", width: "12px", height: "3px", backgroundColor: "#a78bfa", borderRadius: "2px" }} />
+                      Pageviews
+                    </div>
+                  </div>
+
+                  {/* SVG Chart */}
+                  <div style={{ position: "relative", width: "100%", height: "200px" }}>
+                    <svg viewBox="0 0 1000 200" width="100%" height="100%" preserveAspectRatio="none" style={{ overflow: "visible" }}>
+                      {/* Grid Lines */}
+                      <line x1="0" y1="20" x2="1000" y2="20" stroke="#27272a" strokeWidth="1" strokeDasharray="4 4" />
+                      <line x1="0" y1="80" x2="1000" y2="80" stroke="#27272a" strokeWidth="1" strokeDasharray="4 4" />
+                      <line x1="0" y1="140" x2="1000" y2="140" stroke="#27272a" strokeWidth="1" strokeDasharray="4 4" />
+                      <line x1="0" y1="200" x2="1000" y2="200" stroke="#3f3f46" strokeWidth="1" />
+
+                      {(() => {
+                        const maxVal = Math.max(...trendList.map(t => Math.max(t.sessions, t.pageviews, 5)));
+                        const pointsCount = trendList.length;
+                        const stepX = 1000 / Math.max(1, pointsCount - 1);
+
+                        // Unique Companies points
+                        const compPoints = trendList.map((t, idx) => ({
+                          x: idx * stepX,
+                          y: 200 - (t.sessions / maxVal) * 150 - 25
+                        }));
+
+                        // Pageviews points
+                        const pvPoints = trendList.map((t, idx) => ({
+                          x: idx * stepX,
+                          y: 200 - (t.pageviews / maxVal) * 150 - 25
+                        }));
+
+                        const compPath = compPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+                        const pvPath = pvPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+                        const compArea = `${compPath} L 1000 200 L 0 200 Z`;
+
+                        return (
+                          <>
+                            {/* Area for unique companies */}
+                            <path d={compArea} fill="url(#green-gradient)" opacity="0.08" />
+                            
+                            {/* Lines */}
+                            <path d={compPath} fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d={pvPath} fill="none" stroke="#a78bfa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="2 2" />
+
+                            {/* Dots and Labels */}
+                            {trendList.map((t, idx) => {
+                              const compP = compPoints[idx];
+                              const pvP = pvPoints[idx];
+                              return (
+                                <g key={idx}>
+                                  {/* Company Dot */}
+                                  <circle cx={compP.x} cy={compP.y} r="5" fill="#22c55e" stroke="#18181b" strokeWidth="2" style={{ cursor: "pointer" }} />
+                                  {/* Pageview Dot */}
+                                  <circle cx={pvP.x} cy={pvP.y} r="4" fill="#a78bfa" stroke="#18181b" strokeWidth="1.5" style={{ cursor: "pointer" }} />
+                                  
+                                  {/* Value label hover effect */}
+                                  <text x={compP.x} y={compP.y - 12} fill="#22c55e" fontSize="10" fontWeight="bold" textAnchor="middle">{t.sessions}</text>
+                                  <text x={pvP.x} y={pvP.y - 12} fill="#a78bfa" fontSize="10" fontWeight="bold" textAnchor="middle">{t.pageviews}</text>
+                                </g>
+                              );
+                            })}
+
+                            {/* Gradients */}
+                            <defs>
+                              <linearGradient id="green-gradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#22c55e" />
+                                <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+                              </linearGradient>
+                            </defs>
+                          </>
+                        );
+                      })()}
+                    </svg>
+                  </div>
+
+                  {/* Bottom X Axis Labels */}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "15px", padding: "0 10px" }}>
+                    {trendList.map((t, idx) => (
+                      <div key={idx} style={{ fontSize: "11px", color: "#71717a", fontWeight: "600", textAlign: "center", width: `${100 / trendList.length}%` }}>
+                        {t.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
 
           {/* Funnel */}
           <section className="analytics-section funnel-section" style={{ marginBottom: "30px" }}>
@@ -603,24 +869,83 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
           <h3 className="section-title">Corporate User Sessions</h3>
           <p className="section-subtitle">All de-anonymized organizations that have browsed this site</p>
 
-          {usersList.length === 0 ? (
-            <div className="analytics-empty">No corporate sessions recorded yet.</div>
-          ) : (
-            <div className="analytics-table-container">
-              <table className="analytics-table">
-                <thead>
-                  <tr>
-                    <th>Organization</th>
-                    <th>Location</th>
-                    <th>Device / OS</th>
-                    <th className="num">Page Views</th>
-                    <th className="num">Dwell Time</th>
-                    <th className="num">Intent Score</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usersList.map((s) => (
+          {(() => {
+            const uniqueIndustries = Array.from(new Set(usersList.map(u => u.company.industry).filter(Boolean)));
+            const uniqueSizes = Array.from(new Set(usersList.map(u => u.company.size).filter(Boolean)));
+            const filteredUsers = usersList.filter(u => {
+              const matchesSearch = !searchQuery || 
+                u.company.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                u.company.domain.toLowerCase().includes(searchQuery.toLowerCase());
+              const matchesIndustry = !industryFilter || u.company.industry === industryFilter;
+              const matchesSize = !sizeFilter || u.company.size === sizeFilter;
+              return matchesSearch && matchesIndustry && matchesSize;
+            });
+
+            return (
+              <>
+                {/* Filters Bar */}
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "20px", alignItems: "center", background: "#18181b", padding: "12px", borderRadius: "8px", border: "1px solid #27272a" }}>
+                  {/* Search Bar */}
+                  <input
+                    type="text"
+                    placeholder="🔍 Search company name or domain..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ flex: 2, minWidth: "200px", padding: "8px 12px", background: "#09090b", color: "#fff", border: "1px solid #27272a", borderRadius: "6px", fontSize: "13px" }}
+                  />
+
+                  {/* Industry Filter */}
+                  <select
+                    value={industryFilter}
+                    onChange={(e) => setIndustryFilter(e.target.value)}
+                    style={{ flex: 1, minWidth: "140px", padding: "8px 12px", background: "#09090b", color: "#fff", border: "1px solid #27272a", borderRadius: "6px", fontSize: "13px", cursor: "pointer" }}
+                  >
+                    <option value="">All Industries</option>
+                    {uniqueIndustries.map(ind => (
+                      <option key={ind} value={ind}>{ind}</option>
+                    ))}
+                  </select>
+
+                  {/* Size Filter */}
+                  <select
+                    value={sizeFilter}
+                    onChange={(e) => setSizeFilter(e.target.value)}
+                    style={{ flex: 1, minWidth: "140px", padding: "8px 12px", background: "#09090b", color: "#fff", border: "1px solid #27272a", borderRadius: "6px", fontSize: "13px", cursor: "pointer" }}
+                  >
+                    <option value="">All Sizes</option>
+                    {uniqueSizes.map(size => (
+                      <option key={size} value={size}>{size}</option>
+                    ))}
+                  </select>
+
+                  {/* Export CSV Button */}
+                  <button
+                    onClick={() => handleExportCSV(filteredUsers)}
+                    style={{ padding: "8px 16px", background: "#22c55e", color: "#fff", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", transition: "all 0.2s" }}
+                    title="Export leads to CSV"
+                  >
+                    📥 Export CSV
+                  </button>
+                </div>
+
+                {filteredUsers.length === 0 ? (
+                  <div className="analytics-empty">No matching corporate sessions found.</div>
+                ) : (
+                  <div className="analytics-table-container">
+                    <table className="analytics-table">
+                      <thead>
+                        <tr>
+                          <th>Organization</th>
+                          <th>Location</th>
+                          <th>Device / OS</th>
+                          <th className="num">Page Views</th>
+                          <th className="num">Dwell Time</th>
+                          <th className="num">Intent Score</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredUsers.map((s) => (
                     <tr key={s.id}>
                       <td>
                         <div className="table-company">
@@ -666,6 +991,9 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
               </table>
             </div>
           )}
+              </>
+            );
+          })()}
         </section>
       )}
 
@@ -942,7 +1270,94 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
         </section>
       )}
 
-      {/* 8. SCROLL HEATMAP & SESSION DWELL SIMULATOR MODAL */}
+      {/* 8. SETTINGS SUB-TAB */}
+      {subTab === "settings" && (
+        <section className="analytics-section">
+          <h3 className="section-title">⚙️ B2B Lead Intent Score Settings</h3>
+          <p className="section-subtitle">Fine-tune weights, page value multipliers, and engagement dwell bonuses to customize how Lead Intent Scores are calculated</p>
+
+          <div style={{ maxWidth: "600px", background: "#18181b", padding: "24px", borderRadius: "8px", border: "1px solid #27272a", marginTop: "20px" }}>
+            <form onSubmit={handleSaveSettings} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", color: "#a1a1aa", marginBottom: "6px", fontWeight: "600" }}>High-Intent Page Weight</label>
+                  <input
+                    type="number"
+                    value={weightHigh}
+                    onChange={(e) => setWeightHigh(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "14px" }}
+                  />
+                  <span style={{ fontSize: "10px", color: "#71717a", marginTop: "4px", display: "block" }}>Points awarded for high value page views</span>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", color: "#a1a1aa", marginBottom: "6px", fontWeight: "600" }}>Medium-Intent Page Weight</label>
+                  <input
+                    type="number"
+                    value={weightMedium}
+                    onChange={(e) => setWeightMedium(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "14px" }}
+                  />
+                  <span style={{ fontSize: "10px", color: "#71717a", marginTop: "4px", display: "block" }}>Points awarded for documentation/contact pages</span>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", color: "#a1a1aa", marginBottom: "6px", fontWeight: "600" }}>Low-Intent Page Weight</label>
+                  <input
+                    type="number"
+                    value={weightLow}
+                    onChange={(e) => setWeightLow(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "14px" }}
+                  />
+                  <span style={{ fontSize: "10px", color: "#71717a", marginTop: "4px", display: "block" }}>Points awarded for general blog/home visits</span>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", color: "#a1a1aa", marginBottom: "6px", fontWeight: "600" }}>Dwell Time Bonus (per 30s)</label>
+                  <input
+                    type="number"
+                    value={dwellBonusPer30s}
+                    onChange={(e) => setDwellBonusPer30s(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "14px" }}
+                  />
+                  <span style={{ fontSize: "10px", color: "#71717a", marginTop: "4px", display: "block" }}>Multiplier added for session active duration</span>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "12px", color: "#a1a1aa", marginBottom: "6px", fontWeight: "600" }}>Custom High-Intent Page Paths (Comma-separated)</label>
+                <textarea
+                  value={highIntentPagesText}
+                  onChange={(e) => setHighIntentPagesText(e.target.value)}
+                  placeholder="/pricing, /checkout, /enterprise"
+                  style={{ width: "100%", height: "80px", padding: "10px", borderRadius: "6px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "14px", fontFamily: "monospace", resize: "none" }}
+                />
+                <span style={{ fontSize: "10px", color: "#71717a", marginTop: "4px", display: "block" }}>Any visiting paths starting with these will automatically get the high-intent points bonus</span>
+              </div>
+
+              {settingsSuccess && (
+                <div style={{ padding: "10px 14px", borderRadius: "4px", backgroundColor: "rgba(34,197,94,0.15)", border: "1px solid #22c55e", color: "#22c55e", fontSize: "13px", fontWeight: "600" }}>
+                  ✅ Settings saved successfully! All leads intent scores recalculated dynamically.
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={savingSettings}
+                style={{ padding: "12px", borderRadius: "6px", backgroundColor: "#22c55e", color: "#fff", border: "none", cursor: "pointer", fontWeight: "bold", fontSize: "14px", marginTop: "5px", transition: "all 0.2s", opacity: savingSettings ? 0.7 : 1 }}
+              >
+                {savingSettings ? "Saving Settings..." : "💾 Save Settings"}
+              </button>
+            </form>
+          </div>
+        </section>
+      )}
+
+      {/* 9. SCROLL HEATMAP & SESSION DWELL SIMULATOR MODAL */}
       {activeSimSession && (
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
           <div style={{ backgroundColor: "#18181b", border: "1px solid #27272a", width: "80%", maxWidth: "800px", height: "85%", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>

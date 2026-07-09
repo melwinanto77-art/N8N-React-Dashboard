@@ -32,6 +32,7 @@ import {
   SeoSnapshotModel,
   AlertRuleModel,
   AlertLogModel,
+  IntentSettingsModel,
 } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -41,14 +42,46 @@ const PORT = 4000;
 // ---------------------------------------------------------------------------
 // Lead scoring.
 // ---------------------------------------------------------------------------
-const intentWeight = { high: 40, medium: 15, low: 5 };
+let intentSettingsCache = {
+  weightHigh: 40,
+  weightMedium: 15,
+  weightLow: 5,
+  dwellBonusPer30s: 1,
+  highIntentPages: ["/pricing", "/checkout"]
+};
+
+async function loadIntentSettings() {
+  try {
+    let settings = await IntentSettingsModel.findOne({ site: "sashainfinity.com" });
+    if (!settings) {
+      settings = await IntentSettingsModel.create({
+        site: "sashainfinity.com",
+        weightHigh: 40,
+        weightMedium: 15,
+        weightLow: 5,
+        dwellBonusPer30s: 1,
+        highIntentPages: ["/pricing", "/checkout"]
+      });
+    }
+    intentSettingsCache = settings.toObject();
+  } catch (err) {
+    console.error("Failed to load intent settings:", err);
+  }
+}
 
 function computeScore(timeline, totalSeconds) {
+  const wHigh = intentSettingsCache.weightHigh ?? 40;
+  const wMedium = intentSettingsCache.weightMedium ?? 15;
+  const wLow = intentSettingsCache.weightLow ?? 5;
+  const dwellBonus = intentSettingsCache.dwellBonusPer30s ?? 1;
+
+  const intentWeight = { high: wHigh, medium: wMedium, low: wLow };
+
   const intentSum = timeline.reduce(
     (acc, t) => acc + (intentWeight[t.intent] ?? 5),
     0
   );
-  return Math.min(100, intentSum + Math.floor(totalSeconds / 30));
+  return Math.min(100, intentSum + Math.floor(totalSeconds / 30) * dwellBonus);
 }
 
 // ---------------------------------------------------------------------------
@@ -97,8 +130,12 @@ async function aggregateVisit(site, company, page, durationSec, ts, client = {})
   const when = ts ? new Date(ts) : new Date();
   const iso = isNaN(when.getTime()) ? new Date() : when;
 
+  const isHighIntent = intentSettingsCache.highIntentPages?.some(p => page.startsWith(p));
   const pageMeta =
-    PAGES.find((p) => p.path === page) || { path: page, label: page, intent: "low" };
+    PAGES.find((p) => p.path === page) || { path: page, label: page, intent: isHighIntent ? "high" : "low" };
+  if (isHighIntent) {
+    pageMeta.intent = "high";
+  }
 
   const timelineEntry = {
     path: pageMeta.path,
@@ -1415,6 +1452,104 @@ app.get("/api/alerts/logs", async (req, res) => {
   }
 });
 
+// GET Intent Settings
+app.get("/api/settings/intent", async (req, res) => {
+  const site = normalizeSite(req.query.site) || "sashainfinity.com";
+  try {
+    let settings = await IntentSettingsModel.findOne({ site });
+    if (!settings) {
+      settings = await IntentSettingsModel.create({
+        site,
+        weightHigh: 40,
+        weightMedium: 15,
+        weightLow: 5,
+        dwellBonusPer30s: 1,
+        highIntentPages: ["/pricing", "/checkout"]
+      });
+    }
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST Intent Settings
+app.post("/api/settings/intent", async (req, res) => {
+  const { site, weightHigh, weightMedium, weightLow, dwellBonusPer30s, highIntentPages } = req.body;
+  const targetSite = normalizeSite(site) || "sashainfinity.com";
+  try {
+    let settings = await IntentSettingsModel.findOne({ site: targetSite });
+    if (!settings) {
+      settings = new IntentSettingsModel({ site: targetSite });
+    }
+    if (weightHigh !== undefined) settings.weightHigh = Number(weightHigh);
+    if (weightMedium !== undefined) settings.weightMedium = Number(weightMedium);
+    if (weightLow !== undefined) settings.weightLow = Number(weightLow);
+    if (dwellBonusPer30s !== undefined) settings.dwellBonusPer30s = Number(dwellBonusPer30s);
+    if (highIntentPages !== undefined) settings.highIntentPages = highIntentPages;
+
+    await settings.save();
+    
+    // Update local cache
+    intentSettingsCache = settings.toObject();
+    
+    // Also update existing session scores dynamically based on new rules
+    const sessions = await SessionModel.find({ site: targetSite });
+    for (const session of sessions) {
+      session.score = computeScore(session.timeline, session.totalSeconds);
+      session.hot = session.score >= 80;
+      await session.save();
+    }
+    
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET Historical Trend Data
+app.get("/api/analytics/historical-trend", async (req, res) => {
+  const site = normalizeSite(req.query.site);
+  const range = req.query.range || "7d";
+  if (!site) return res.status(400).json({ error: "site is required" });
+  
+  let days = 7;
+  if (range === "today") days = 1;
+  else if (range === "30d") days = 30;
+  
+  try {
+    const trend = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - i);
+      
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      
+      const sessionsCount = await SessionModel.countDocuments({
+        site,
+        lastSeen: { $gte: start, $lt: end }
+      });
+      
+      const pageviewsCount = await VisitModel.countDocuments({
+        site,
+        ts: { $gte: start, $lt: end }
+      });
+      
+      // Format date label
+      const label = days === 1 
+        ? `${start.getHours()}:00` 
+        : start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        
+      trend.push({ label, sessions: sessionsCount, pageviews: pageviewsCount });
+    }
+    res.json(trend);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/analytics/overview", async (req, res) => {
   const site = normalizeSite(req.query.site);
   if (!site) return res.status(400).json({ error: "site is required" });
@@ -1471,6 +1606,7 @@ app.get("/api/analytics/overview", async (req, res) => {
 async function startServer() {
   try {
     await connectDB();
+    await loadIntentSettings();
     
     // Seed default alert rules if none exist
     const count = await AlertRuleModel.countDocuments();

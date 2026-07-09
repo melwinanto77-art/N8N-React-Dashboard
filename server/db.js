@@ -150,11 +150,24 @@ const AlertLogSchema = new Schema({
   timestamps: true
 });
 
+// Intent Settings schema
+const IntentSettingsSchema = new Schema({
+  site: { type: String, required: true, unique: true },
+  weightHigh: { type: Number, default: 40 },
+  weightMedium: { type: Number, default: 15 },
+  weightLow: { type: Number, default: 5 },
+  dwellBonusPer30s: { type: Number, default: 1 },
+  highIntentPages: { type: [String], default: ["/pricing", "/checkout"] }
+}, {
+  timestamps: true
+});
+
 export const SessionModel = mongoose.model("Session", SessionSchema);
 export const VisitModel = mongoose.model("Visit", VisitSchema);
 export const SeoSnapshotModel = mongoose.model("SeoSnapshot", SeoSnapshotSchema);
 export const AlertRuleModel = mongoose.model("AlertRule", AlertRuleSchema);
 export const AlertLogModel = mongoose.model("AlertLog", AlertLogSchema);
+export const IntentSettingsModel = mongoose.model("IntentSettings", IntentSettingsSchema);
 
 export async function connectDB() {
   const uri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/b2b-radar";
