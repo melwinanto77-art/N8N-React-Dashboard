@@ -25,6 +25,28 @@ function hostFromUrl(url) {
   }
 }
 
+function getIcpTier(company) {
+  const targetIndustries = ["Fintech", "E-commerce", "SaaS", "Software", "Infrastructure"];
+  const primaryCountries = ["United States", "Canada", "United Kingdom", "Sweden", "Germany", "France", "Australia"];
+  
+  const isTargetInd = targetIndustries.includes(company.industry);
+  const isPrimaryCountry = primaryCountries.includes(company.country);
+  
+  let isLarge = false;
+  if (company.size) {
+    const parts = company.size.split("-");
+    const val = parseInt(parts[parts.length - 1].replace(/\+/g, ""));
+    if (!isNaN(val) && val >= 1000) {
+      isLarge = true;
+    }
+  }
+  
+  if (isTargetInd && isLarge && isPrimaryCountry) return "A";
+  if (isTargetInd) return "B";
+  if (isLarge || company.size === "100-500" || company.size === "500-1000") return "C";
+  return "D";
+}
+
 function SafeCompanyLogo({ logo, name }) {
   const [logoOk, setLogoOk] = useState(() => {
     if (logo && logo.startsWith("https://logo.clearbit.com/")) {
@@ -96,6 +118,9 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState(false);
 
+  const [blacklistText, setBlacklistText] = useState("");
+  const [webhookTesting, setWebhookTesting] = useState({});
+
   // Fetch Intent Settings
   async function fetchIntentSettings() {
     if (!site) return;
@@ -108,6 +133,7 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
         setWeightLow(data.weightLow ?? 5);
         setDwellBonusPer30s(data.dwellBonusPer30s ?? 1);
         setHighIntentPagesText(data.highIntentPages ? data.highIntentPages.join(", ") : "/pricing, /checkout");
+        setBlacklistText(data.blacklistDomains ? data.blacklistDomains.join("\n") : "");
       }
     } catch (err) {
       console.error("Failed to fetch intent settings:", err);
@@ -141,6 +167,11 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
         .split(",")
         .map((p) => p.trim())
         .filter(Boolean);
+
+      const blacklistList = blacklistText
+        .split("\n")
+        .map((d) => d.trim().toLowerCase())
+        .filter(Boolean);
         
       const res = await fetch("/api/settings/intent", {
         method: "POST",
@@ -151,7 +182,8 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
           weightMedium: Number(weightMedium),
           weightLow: Number(weightLow),
           dwellBonusPer30s: Number(dwellBonusPer30s),
-          highIntentPages: list
+          highIntentPages: list,
+          blacklistDomains: blacklistList
         })
       });
       if (res.ok) {
@@ -191,6 +223,30 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  // Test Webhook Trigger Connection
+  async function testWebhook(rule) {
+    const rId = rule._id || rule.name;
+    setWebhookTesting(prev => ({ ...prev, [rId]: "testing" }));
+    try {
+      const res = await fetch("/api/alerts/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webhookUrl: rule.webhookUrl,
+          ruleName: rule.name
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setWebhookTesting(prev => ({ ...prev, [rId]: `Success (${data.status})` }));
+      } else {
+        setWebhookTesting(prev => ({ ...prev, [rId]: `Failed (${data.error || "Error"})` }));
+      }
+    } catch (err) {
+      setWebhookTesting(prev => ({ ...prev, [rId]: `Error: ${err.message}` }));
+    }
   }
 
   // Fetch trend on load/range change
@@ -590,7 +646,24 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                             <div className="table-company">
                               <SafeCompanyLogo logo={c.logo} name={c.name} />
                               <div>
-                                <div className="table-company-name">{c.name}</div>
+                                <div className="table-company-name" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                  {c.name}
+                                  {(() => {
+                                    const icpTier = getIcpTier(c);
+                                    const colorMap = {
+                                      A: { bg: "#065f46", text: "#34d399" },
+                                      B: { bg: "#1e3a8a", text: "#93c5fd" },
+                                      C: { bg: "#78350f", text: "#fcd34d" },
+                                      D: { bg: "#3f3f46", text: "#d4d4d8" }
+                                    };
+                                    const config = colorMap[icpTier] || colorMap.D;
+                                    return (
+                                      <span style={{ fontSize: "9px", padding: "1px 4px", borderRadius: "3px", backgroundColor: config.bg, color: config.text, fontWeight: "bold" }}>
+                                        ICP {icpTier}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
                                 <div className="table-company-domain">{c.id}</div>
                               </div>
                             </div>
@@ -951,7 +1024,24 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                         <div className="table-company">
                           <SafeCompanyLogo logo={s.company.logo} name={s.company.name} />
                           <div>
-                            <div className="table-company-name" style={{ color: "#f4f4f5" }}>{s.company.name}</div>
+                            <div className="table-company-name" style={{ color: "#f4f4f5", display: "flex", alignItems: "center", gap: "6px" }}>
+                              {s.company.name}
+                              {(() => {
+                                const icpTier = getIcpTier(s.company);
+                                const colorMap = {
+                                  A: { bg: "#065f46", text: "#34d399" },
+                                  B: { bg: "#1e3a8a", text: "#93c5fd" },
+                                  C: { bg: "#78350f", text: "#fcd34d" },
+                                  D: { bg: "#3f3f46", text: "#d4d4d8" }
+                                };
+                                const config = colorMap[icpTier] || colorMap.D;
+                                return (
+                                  <span style={{ fontSize: "9px", padding: "1px 4px", borderRadius: "3px", backgroundColor: config.bg, color: config.text, fontWeight: "bold" }}>
+                                    ICP {icpTier}
+                                  </span>
+                                );
+                              })()}
+                            </div>
                             <div className="table-company-domain" style={{ fontSize: "11px" }}>{s.company.domain}</div>
                           </div>
                         </div>
@@ -1031,7 +1121,24 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                           <div className="table-company">
                             <SafeCompanyLogo logo={s.company.logo} name={s.company.name} />
                             <div>
-                              <div className="table-company-name" style={{ color: "#f4f4f5" }}>{s.company.name}</div>
+                              <div className="table-company-name" style={{ color: "#f4f4f5", display: "flex", alignItems: "center", gap: "6px" }}>
+                                {s.company.name}
+                                {(() => {
+                                  const icpTier = getIcpTier(s.company);
+                                  const colorMap = {
+                                    A: { bg: "#065f46", text: "#34d399" },
+                                    B: { bg: "#1e3a8a", text: "#93c5fd" },
+                                    C: { bg: "#78350f", text: "#fcd34d" },
+                                    D: { bg: "#3f3f46", text: "#d4d4d8" }
+                                  };
+                                  const config = colorMap[icpTier] || colorMap.D;
+                                  return (
+                                    <span style={{ fontSize: "9px", padding: "1px 4px", borderRadius: "3px", backgroundColor: config.bg, color: config.text, fontWeight: "bold" }}>
+                                      ICP {icpTier}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                               <div className="table-company-domain" style={{ fontSize: "11px" }}>{s.company.domain}</div>
                             </div>
                           </div>
@@ -1228,19 +1335,37 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
 
               <h4 style={{ margin: "15px 0 5px 0", fontSize: "14px", color: "#e4e4e7" }}>Active Rules</h4>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {rulesList.map((r, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#09090b", padding: "10px", borderRadius: "4px", border: "1px solid #27272a" }}>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "#fff", fontWeight: "600" }}>{r.name}</div>
-                      <div style={{ fontSize: "10px", color: "#71717a" }}>
-                        If {r.triggerType} equals/exceeds {r.value || r.threshold || 80} {"\u2192"} Send Webhook
+                {rulesList.map((r, i) => {
+                  const rId = r._id || r.name;
+                  const statusText = webhookTesting[rId];
+                  return (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#09090b", padding: "10px", borderRadius: "4px", border: "1px solid #27272a" }}>
+                      <div>
+                        <div style={{ fontSize: "12px", color: "#fff", fontWeight: "600" }}>{r.name}</div>
+                        <div style={{ fontSize: "10px", color: "#71717a" }}>
+                          If {r.triggerType} equals/exceeds {r.value || r.threshold || 80} {"\u2192"} Send Webhook
+                        </div>
+                        {statusText && (
+                          <div style={{ fontSize: "10px", color: statusText.startsWith("Success") ? "#22c55e" : statusText === "testing" ? "#eab308" : "#ef4444", marginTop: "2px", fontWeight: "600" }}>
+                            {statusText === "testing" ? "⚡ Sending mock test..." : `Result: ${statusText}`}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <button
+                          onClick={() => testWebhook(r)}
+                          disabled={statusText === "testing"}
+                          style={{ padding: "4px 8px", fontSize: "11px", border: "1px solid #3f3f46", backgroundColor: "#18181b", color: "#fff", cursor: "pointer", borderRadius: "4px", fontWeight: "600" }}
+                        >
+                          ⚡ Test
+                        </button>
+                        <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "3px", backgroundColor: r.active ? "rgba(34,197,94,0.15)" : "#27272a", color: r.active ? "#22c55e" : "#a1a1aa" }}>
+                          {r.active ? "Active" : "Inactive"}
+                        </span>
                       </div>
                     </div>
-                    <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "3px", backgroundColor: r.active ? "rgba(34,197,94,0.15)" : "#27272a", color: r.active ? "#22c55e" : "#a1a1aa" }}>
-                      {r.active ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -1338,7 +1463,16 @@ export default function AnalyticsPanel({ site, onViewContacts }) {
                 />
                 <span style={{ fontSize: "10px", color: "#71717a", marginTop: "4px", display: "block" }}>Any visiting paths starting with these will automatically get the high-intent points bonus</span>
               </div>
-
+              <div>
+                <label style={{ display: "block", fontSize: "12px", color: "#a1a1aa", marginBottom: "6px", fontWeight: "600" }}>Domain Exclusion Blacklist (One domain per line)</label>
+                <textarea
+                  value={blacklistText}
+                  onChange={(e) => setBlacklistText(e.target.value)}
+                  placeholder="competitor.com&#10;mycurrentcustomer.com"
+                  style={{ width: "100%", height: "80px", padding: "10px", borderRadius: "6px", border: "1px solid #27272a", backgroundColor: "#09090b", color: "#fff", fontSize: "14px", fontFamily: "monospace", resize: "none" }}
+                />
+                <span style={{ fontSize: "10px", color: "#71717a", marginTop: "4px", display: "block" }}>Any visits matching these domains will be hidden from the dashboard feed</span>
+              </div>
               {settingsSuccess && (
                 <div style={{ padding: "10px 14px", borderRadius: "4px", backgroundColor: "rgba(34,197,94,0.15)", border: "1px solid #22c55e", color: "#22c55e", fontSize: "13px", fontWeight: "600" }}>
                   ✅ Settings saved successfully! All leads intent scores recalculated dynamically.

@@ -47,7 +47,8 @@ let intentSettingsCache = {
   weightMedium: 15,
   weightLow: 5,
   dwellBonusPer30s: 1,
-  highIntentPages: ["/pricing", "/checkout"]
+  highIntentPages: ["/pricing", "/checkout"],
+  blacklistDomains: []
 };
 
 async function loadIntentSettings() {
@@ -60,7 +61,8 @@ async function loadIntentSettings() {
         weightMedium: 15,
         weightLow: 5,
         dwellBonusPer30s: 1,
-        highIntentPages: ["/pricing", "/checkout"]
+        highIntentPages: ["/pricing", "/checkout"],
+        blacklistDomains: []
       });
     }
     intentSettingsCache = settings.toObject();
@@ -126,6 +128,10 @@ const activeSites = new Set();
 // os, referrer, ...). Returns the updated session object.
 // ---------------------------------------------------------------------------
 async function aggregateVisit(site, company, page, durationSec, ts, client = {}) {
+  const blacklist = intentSettingsCache.blacklistDomains || [];
+  if (company && company.domain && blacklist.includes(company.domain)) {
+    return null;
+  }
   const dwell = Math.max(0, Math.round(Number(durationSec) || 0));
   const when = ts ? new Date(ts) : new Date();
   const iso = isNaN(when.getTime()) ? new Date() : when;
@@ -1143,12 +1149,13 @@ app.get("/api/analytics/top-companies", async (req, res) => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+    const blacklist = intentSettingsCache.blacklistDomains || [];
     const results = await VisitModel.aggregate([
       {
         $match: {
           site,
           ts: { $gte: sevenDaysAgo },
-          "company.domain": { $exists: true, $ne: null }
+          "company.domain": { $exists: true, $ne: null, $nin: blacklist }
         }
       },
       {
@@ -1277,7 +1284,12 @@ app.get("/api/analytics/users", async (req, res) => {
   const site = normalizeSite(req.query.site);
   if (!site) return res.status(400).json({ error: "site is required" });
   try {
-    const sessions = await SessionModel.find({ site }).sort({ lastSeen: -1 });
+    const blacklist = intentSettingsCache.blacklistDomains || [];
+    const query = { site };
+    if (blacklist.length > 0) {
+      query["company.domain"] = { $nin: blacklist };
+    }
+    const sessions = await SessionModel.find(query).sort({ lastSeen: -1 });
     res.json(sessions);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1288,7 +1300,12 @@ app.get("/api/analytics/new-logins", async (req, res) => {
   const site = normalizeSite(req.query.site);
   if (!site) return res.status(400).json({ error: "site is required" });
   try {
-    const sessions = await SessionModel.find({ site, identifiedEmail: { $ne: null } }).sort({ lastSeen: -1 });
+    const blacklist = intentSettingsCache.blacklistDomains || [];
+    const query = { site, identifiedEmail: { $ne: null } };
+    if (blacklist.length > 0) {
+      query["company.domain"] = { $nin: blacklist };
+    }
+    const sessions = await SessionModel.find(query).sort({ lastSeen: -1 });
     res.json(sessions);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1452,6 +1469,8 @@ app.get("/api/alerts/logs", async (req, res) => {
   }
 });
 
+
+
 // GET Intent Settings
 app.get("/api/settings/intent", async (req, res) => {
   const site = normalizeSite(req.query.site) || "sashainfinity.com";
@@ -1464,7 +1483,8 @@ app.get("/api/settings/intent", async (req, res) => {
         weightMedium: 15,
         weightLow: 5,
         dwellBonusPer30s: 1,
-        highIntentPages: ["/pricing", "/checkout"]
+        highIntentPages: ["/pricing", "/checkout"],
+        blacklistDomains: []
       });
     }
     res.json(settings);
@@ -1475,7 +1495,7 @@ app.get("/api/settings/intent", async (req, res) => {
 
 // POST Intent Settings
 app.post("/api/settings/intent", async (req, res) => {
-  const { site, weightHigh, weightMedium, weightLow, dwellBonusPer30s, highIntentPages } = req.body;
+  const { site, weightHigh, weightMedium, weightLow, dwellBonusPer30s, highIntentPages, blacklistDomains } = req.body;
   const targetSite = normalizeSite(site) || "sashainfinity.com";
   try {
     let settings = await IntentSettingsModel.findOne({ site: targetSite });
@@ -1487,6 +1507,7 @@ app.post("/api/settings/intent", async (req, res) => {
     if (weightLow !== undefined) settings.weightLow = Number(weightLow);
     if (dwellBonusPer30s !== undefined) settings.dwellBonusPer30s = Number(dwellBonusPer30s);
     if (highIntentPages !== undefined) settings.highIntentPages = highIntentPages;
+    if (blacklistDomains !== undefined) settings.blacklistDomains = blacklistDomains;
 
     await settings.save();
     
@@ -1502,6 +1523,49 @@ app.post("/api/settings/intent", async (req, res) => {
     }
     
     res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST Test Webhook Connection
+app.post("/api/alerts/test", async (req, res) => {
+  const { webhookUrl, ruleName } = req.body;
+  if (!webhookUrl) return res.status(400).json({ error: "webhookUrl is required" });
+
+  const payload = {
+    site: "sashainfinity.com",
+    event: "alert_test",
+    ruleName: ruleName || "Test Webhook Trigger",
+    company: {
+      name: "Stripe",
+      domain: "stripe.com",
+      industry: "Fintech",
+      size: "1000-5000",
+      city: "San Francisco",
+      country: "United States",
+      logo: "https://logo.clearbit.com/stripe.com"
+    },
+    intentScore: 95,
+    pageViews: 8,
+    totalSeconds: 360,
+    identifiedEmail: "test.lead@stripe.com",
+    description: "Stripe from San Francisco viewed Enterprise Pricing page with high buying intent. (Test Trigger)"
+  };
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    
+    const text = await response.text();
+    res.json({
+      status: response.status,
+      statusText: response.statusText,
+      body: text.slice(0, 500)
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -157,7 +157,8 @@ const IntentSettingsSchema = new Schema({
   weightMedium: { type: Number, default: 15 },
   weightLow: { type: Number, default: 5 },
   dwellBonusPer30s: { type: Number, default: 1 },
-  highIntentPages: { type: [String], default: ["/pricing", "/checkout"] }
+  highIntentPages: { type: [String], default: ["/pricing", "/checkout"] },
+  blacklistDomains: { type: [String], default: [] }
 }, {
   timestamps: true
 });

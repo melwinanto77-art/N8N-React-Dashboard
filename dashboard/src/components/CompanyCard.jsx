@@ -27,6 +27,28 @@ function hostFromUrl(url) {
   }
 }
 
+function getIcpTier(company) {
+  const targetIndustries = ["Fintech", "E-commerce", "SaaS", "Software", "Infrastructure"];
+  const primaryCountries = ["United States", "Canada", "United Kingdom", "Sweden", "Germany", "France", "Australia"];
+  
+  const isTargetInd = targetIndustries.includes(company.industry);
+  const isPrimaryCountry = primaryCountries.includes(company.country);
+  
+  let isLarge = false;
+  if (company.size) {
+    const parts = company.size.split("-");
+    const val = parseInt(parts[parts.length - 1].replace(/\+/g, ""));
+    if (!isNaN(val) && val >= 1000) {
+      isLarge = true;
+    }
+  }
+  
+  if (isTargetInd && isLarge && isPrimaryCountry) return "A";
+  if (isTargetInd) return "B";
+  if (isLarge || company.size === "100-500" || company.size === "500-1000") return "C";
+  return "D";
+}
+
 export default function CompanyCard({ session, flashing, onViewContacts }) {
   const { company, score, hot, totalSeconds, pageViews, timeline, client } = session;
   const [logoOk, setLogoOk] = useState(() => {
@@ -71,8 +93,23 @@ export default function CompanyCard({ session, flashing, onViewContacts }) {
             </div>
           )}
           <div className="card-titles">
-            <h3 className="card-name" title={company.domain}>
+            <h3 className="card-name" title={company.domain} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               {company.name}
+              {(() => {
+                const icpTier = getIcpTier(company);
+                const colorMap = {
+                  A: { bg: "#065f46", text: "#34d399" },
+                  B: { bg: "#1e3a8a", text: "#93c5fd" },
+                  C: { bg: "#78350f", text: "#fcd34d" },
+                  D: { bg: "#3f3f46", text: "#d4d4d8" }
+                };
+                const config = colorMap[icpTier] || colorMap.D;
+                return (
+                  <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", backgroundColor: config.bg, color: config.text, fontWeight: "bold" }}>
+                    ICP {icpTier}
+                  </span>
+                );
+              })()}
             </h3>
             <div className="card-meta">{meta}</div>
           </div>
@@ -120,6 +157,21 @@ export default function CompanyCard({ session, flashing, onViewContacts }) {
             <span className="card-realinfo-val" style={{ color: "#22c55e", fontWeight: "600" }}>🔑 {session.identifiedEmail}</span>
           </div>
         )}
+      </div>
+
+      {/* Horizontal B2B Journey Path Flow */}
+      <div className="journey-flow" style={{ display: "flex", alignItems: "center", gap: "8px", overflowX: "auto", padding: "10px 14px", background: "#09090b", borderRadius: "6px", margin: "12px 16px 0 16px", border: "1px solid #27272a" }}>
+        {timeline.map((row, idx) => (
+          <div key={idx} style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+            {idx > 0 && <span style={{ color: "#71717a", fontSize: "11px" }}>➔</span>}
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", backgroundColor: "#18181b", padding: "3px 8px", borderRadius: "4px", border: "1px solid #27272a" }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: row.intent === "high" ? "#22c55e" : row.intent === "medium" ? "#3b82f6" : "#71717a" }} />
+              <span style={{ fontSize: "11px", fontWeight: "600", color: "#e4e4e7" }} title={row.path}>
+                {row.label}
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
 
       <ul className="timeline">
