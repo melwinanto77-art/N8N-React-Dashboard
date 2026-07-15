@@ -6,7 +6,7 @@
 ---
 
 ## 📝 Executive Summary
-Today's updates optimized startup connectivity by configuring the React dashboard to automatically load and connect to `sashainfinity.com` as the default site. Additionally, we cleared mock seeds from MongoDB, started the exited Postgres and Redis docker containers, and resolved workflow timeout errors (Postgres & Slack nodes) by changing connection hosts to `localhost`.
+Today's updates optimized startup connectivity by configuring the React dashboard to automatically load and connect to `sashainfinity.com` as the default site. Additionally, we cleared mock seeds from MongoDB, started the exited Postgres and Redis docker containers, resolved workflow timeout errors by changing connection hosts to `localhost`, and fixed the HTTP 404 error on the `Slack Alert` node by rebuilding the backend API Docker container.
 
 ---
 
@@ -19,6 +19,9 @@ Today's updates optimized startup connectivity by configuring the React dashboar
 ### 2. 🔌 Postgres & HTTP Webhook Connection Fixes
 * **Docker Container Boot:** Started the exited B2B container services (`backend-postgres-1`, `backend-redis-1`, and `backend-api-1`) to listen on host ports.
 * **n8n Hostname Update:** Replaced `host.docker.internal` with `localhost` in both [credentials.json](file:///C:/Users/kewin/Documents/b2b-inbound-radar/backend/n8n-workflows/credentials.json) and workflow configuration files ([n8n/workflow.json](file:///C:/Users/kewin/Documents/b2b-inbound-radar/n8n/workflow.json) and [backend/n8n-workflows/analytics-workflow.json](file:///C:/Users/kewin/Documents/b2b-inbound-radar/backend/n8n-workflows/analytics-workflow.json)). This resolves the ETIMEDOUT connection errors in the "Get Active Sites" and "Slack Alert" nodes.
+
+### 3. 🛠️ Slack HTTP 404 Resolution (API Container Rebuild)
+* **Rebuild & Recreate:** Ran `docker-compose up -d --build api` to rebuild the `backend-api` container image. This successfully loaded the mock Slack webhook endpoint (`/api/v1/mock-slack`) defined in `backend/api/server.js` to clear the HTTP 404 Resource Not Found errors in n8n.
 
 ---
 
