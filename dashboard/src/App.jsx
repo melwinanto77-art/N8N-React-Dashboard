@@ -6,7 +6,7 @@ import SEOPanel from "./components/SEOPanel.jsx";
 import AnalyticsPanel from "./components/AnalyticsPanel.jsx";
 
 export default function App() {
-  const [site, setSite] = useState("");
+  const [site, setSite] = useState("sashainfinity.com");
   const [selected, setSelected] = useState(null);
   const [seoOpen, setSeoOpen] = useState(false);
   const [overview, setOverview] = useState(null);
