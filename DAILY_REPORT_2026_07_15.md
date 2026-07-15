@@ -6,7 +6,7 @@
 ---
 
 ## 📝 Executive Summary
-Today's updates optimized startup connectivity by configuring the React dashboard to automatically load and connect to `sashainfinity.com` as the default site. Additionally, we cleared mock seeds from MongoDB, started the exited Postgres and Redis docker containers, and updated the n8n database credentials host to `localhost` to fix ETIMEDOUT connection errors in the "Get Active Sites" node.
+Today's updates optimized startup connectivity by configuring the React dashboard to automatically load and connect to `sashainfinity.com` as the default site. Additionally, we cleared mock seeds from MongoDB, started the exited Postgres and Redis docker containers, and resolved workflow timeout errors (Postgres & Slack nodes) by changing connection hosts to `localhost`.
 
 ---
 
@@ -16,15 +16,17 @@ Today's updates optimized startup connectivity by configuring the React dashboar
 * **Default Launch Hook:** Modified `dashboard/src/App.jsx` to pre-initialize the active site state to `"sashainfinity.com"` by default.
 * **Mock Cleanup:** Cleared all dummy sessions and visit logs for `sashainfinity.com` from MongoDB to enforce strict real-time reporting.
 
-### 2. 🔌 Postgres Database Connection Fix (Get Active Sites Node)
+### 2. 🔌 Postgres & HTTP Webhook Connection Fixes
 * **Docker Container Boot:** Started the exited B2B container services (`backend-postgres-1`, `backend-redis-1`, and `backend-api-1`) to listen on host ports.
-* **Credentials Mapping Update:** Changed the database host in [credentials.json](file:///C:/Users/kewin/Documents/b2b-inbound-radar/backend/n8n-workflows/credentials.json) from `host.docker.internal` to `localhost` and imported it into n8n. This resolves the `ETIMEDOUT` connection errors since n8n is running locally as a host process.
+* **n8n Hostname Update:** Replaced `host.docker.internal` with `localhost` in both [credentials.json](file:///C:/Users/kewin/Documents/b2b-inbound-radar/backend/n8n-workflows/credentials.json) and workflow configuration files ([n8n/workflow.json](file:///C:/Users/kewin/Documents/b2b-inbound-radar/n8n/workflow.json) and [backend/n8n-workflows/analytics-workflow.json](file:///C:/Users/kewin/Documents/b2b-inbound-radar/backend/n8n-workflows/analytics-workflow.json)). This resolves the ETIMEDOUT connection errors in the "Get Active Sites" and "Slack Alert" nodes.
 
 ---
 
 ## 📂 Modified Code Files
 * **[`dashboard/src/App.jsx`](file:///C:/Users/kewin/Documents/b2b-inbound-radar/dashboard/src/App.jsx):** Set default site state hook value to `"sashainfinity.com"`.
 * **[`backend/n8n-workflows/credentials.json`](file:///C:/Users/kewin/Documents/b2b-inbound-radar/backend/n8n-workflows/credentials.json):** Updated Postgres and SMTP hosts from `host.docker.internal` to `localhost`.
+* **[`n8n/workflow.json`](file:///C:/Users/kewin/Documents/b2b-inbound-radar/n8n/workflow.json):** Changed Push to Radar endpoint host to `localhost`.
+* **[`backend/n8n-workflows/analytics-workflow.json`](file:///C:/Users/kewin/Documents/b2b-inbound-radar/backend/n8n-workflows/analytics-workflow.json):** Changed Slack Alert mock URL host to `localhost`.
 
 ---
 
